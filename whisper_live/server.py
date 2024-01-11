@@ -10,7 +10,13 @@ from websockets.sync.server import serve
 
 import torch
 import numpy as np
-import time
+import queue
+
+from whisper_live.vad import VoiceActivityDetection
+from scipy.io.wavfile import write
+import functools
+
+from whisper_live.vad import VoiceActivityDetection
 from whisper_live.transcriber import WhisperModel
 try:
     from whisper_live.transcriber_tensorrt import WhisperTRTLLM
@@ -175,7 +181,7 @@ class TranscriptionServer:
         Args:
             websocket: The websocket to receive audio from.
 
-    def recv_audio(self, websocket):
+    def recv_audio(self, websocket, backend="tensorrt", whisper_tensorrt_path=None):
         """
         Receive audio chunks from a client in an infinite loop.
 
@@ -222,16 +228,44 @@ class TranscriptionServer:
             del websocket
             return
 
-        client = ServeClient(
-            websocket,
-            multilingual=options["multilingual"],
-            language=options["language"],
-            task=options["task"],
-            client_uid=options["uid"],
-            model_size=options["model_size"],
-            initial_prompt=options["initial_prompt"],
-            vad_parameters=options["vad_parameters"]
-        )
+        if self.backend == "tensorrt":
+            try:
+                import tensorrt as trt
+                import tensorrt_llm
+                self.backend = "tensorrt"
+                client = ServeClientTensorRT(
+                    websocket,
+                    multilingual=options["multilingual"],
+                    language=options["language"],
+                    task=options["task"],
+                    client_uid=options["uid"],
+                    model_path=whisper_tensorrt_path
+                )
+                logging.info(f"Running TensorRT backend.")
+            except Exception as e:
+                websocket.send(
+                    json.dumps(
+                        {
+                            "uid": self.client_uid,
+                            "status": "ERROR",
+                            "message": f"TensorRT-LLM not supported on Server yet. Reverting to available backend: 'faster_whisper'"
+                        }
+                    )
+                )
+                self.backend = "faster_whisper"
+
+        if self.backend == "faster_whisper":
+            client = ServeClientFasterWhisper(
+                websocket,
+                multilingual=options["multilingual"],
+                language=options["language"],
+                task=options["task"],
+                client_uid=options["uid"],
+                model_size=options["model_size"],
+                initial_prompt=options.get("initial_prompt"),
+                vad_parameters=options.get("vad_parameters")
+            )
+            logging.info(f"Running faster_whisper backend.")
         
         self.clients[websocket] = client
         self.clients_start_time[websocket] = time.time()
@@ -284,8 +318,7 @@ class TranscriptionServer:
 
             except Exception as e:
                 logging.error(e)
-                if self.clients[websocket].model_size is not None:
-                    self.clients[websocket].cleanup()
+                self.clients[websocket].cleanup()
                 self.clients.pop(websocket)
                 self.clients_start_time.pop(websocket)
                 logging.info("Connection Closed.")
@@ -293,7 +326,7 @@ class TranscriptionServer:
                 del websocket
                 break
 
-    def run(self, host, port=9090):
+    def run(self, host, port=9090, backend="tensorrt", whisper_tensorrt_path=None):
         """
         Run the transcription server.
 
@@ -301,7 +334,15 @@ class TranscriptionServer:
             host (str): The host address to bind the server.
             port (int): The port number to bind the server.
         """
-        with serve(self.recv_audio, host, port) as server:
+        with serve(
+            functools.partial(
+                self.recv_audio,
+                backend=backend,
+                whisper_tensorrt_path=whisper_tensorrt_path
+            ),
+            host,
+            port
+        ) as server:
             server.serve_forever()
 
     def voice_activity(self, websocket, frame_np):
@@ -462,7 +503,14 @@ class ServeClientTensorRT(ServeClientBase):
         self.language = language if multilingual else "en"
         self.task = task
         self.eos = False
-        self.transcriber = WhisperTRTLLM(model_path, False, "assets", device="cuda")
+        self.transcriber = WhisperTRTLLM(
+            model_path, 
+            assets_dir="assets", 
+            device="cuda",
+            is_multilingual=multilingual,
+            language=self.language,
+            task=self.task
+        )
 
         # threading
         self.trans_thread = threading.Thread(target=self.speech_to_text)
@@ -889,29 +937,3 @@ class ServeClientFasterWhisper(ServeClientBase):
             self.timestamp_offset += offset
 
         return last_segment
-
-        This method sends a disconnect message to the client via the WebSocket connection to notify them
-        that the transcription service is disconnecting gracefully.
-
-        """
-        self.websocket.send(
-            json.dumps(
-                {
-                    "uid": self.client_uid,
-                    "message": self.DISCONNECT
-                }
-            )
-        )
-    
-    def cleanup(self):
-        """
-        Perform cleanup tasks before exiting the transcription service.
-
-        This method performs necessary cleanup tasks, including stopping the transcription thread, marking
-        the exit flag to indicate the transcription thread should exit gracefully, and destroying resources
-        associated with the transcription process.
-
-        """
-        logging.info("Cleaning up.")
-        self.exit = True
-        self.transcriber.destroy()

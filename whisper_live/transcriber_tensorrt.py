@@ -171,8 +171,16 @@ class WhisperDecoding:
 
 class WhisperTRTLLM(object):
 
-    def __init__(self, engine_dir, assets_dir=None, device=None, is_multilingual=False,
-                 language="en", task="transcribe"):
+    def __init__(
+        self,
+        engine_dir,
+        debug_mode=False,
+        assets_dir=None,
+        device=None,
+        is_multilingual=False,
+        language="en",
+        task="transcribe"
+        ):
         world_size = 1
         runtime_rank = tensorrt_llm.mpi_rank()
         runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
