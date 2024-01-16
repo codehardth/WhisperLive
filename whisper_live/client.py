@@ -8,8 +8,38 @@ import json
 import websocket
 import uuid
 import time
-import ffmpeg
-import whisper_live.utils as utils
+
+from typing import Callable
+
+
+def resample(file: str, sr: int = 16000):
+    """
+    # https://github.com/openai/whisper/blob/7858aa9c08d98f75575035ecd6481f462d66ca27/whisper/audio.py#L22
+    Open an audio file and read as mono waveform, resampling as necessary,
+    save the resampled audio
+
+    Args:
+        file (str): The audio file to open
+        sr (int): The sample rate to resample the audio if necessary
+    
+    Returns:
+        resampled_file (str): The resampled audio file
+    """
+    try:
+        # This launches a subprocess to decode audio while down-mixing and resampling as necessary.
+        # Requires the ffmpeg CLI and `ffmpeg-python` package to be installed.
+        out, _ = (
+            ffmpeg.input(file, threads=0)
+            .output("-", format="s16le", acodec="pcm_s16le", ac=1, ar=sr)
+            .run(cmd=["ffmpeg", "-nostdin"], capture_stdout=True, capture_stderr=True)
+        )
+    except ffmpeg.Error as e:
+        raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
+    np_buffer = np.frombuffer(out, dtype=np.int16)
+
+    resampled_file = f"{file.split('.')[0]}_resampled.wav"
+    scipy.io.wavfile.write(resampled_file, sr, np_buffer.astype(np.int16))
+    return resampled_file
 
 
 class Client:
@@ -19,15 +49,20 @@ class Client:
     INSTANCES = {}
     END_OF_AUDIO = "END_OF_AUDIO"
 
+    __messages__ : list[list[str]] = []
+
+    def total_messages(self) -> list[list[str]]:
+        return self.__messages__
+
     def __init__(
         self,
         host=None,
         port=None,
         lang=None,
         translate=False,
-        model="small",
-        srt_file_path="output.srt",
-        use_vad=True
+        model_size="small",
+        use_custom_model=False,
+        callback: Callable[[list[str]], any]=None
     ):
         """
         Initializes a Client instance for audio recording and streaming to a server.
@@ -51,10 +86,8 @@ class Client:
         self.language = lang
         self.model = model
         self.server_error = False
-        self.srt_file_path = srt_file_path
-        self.use_vad = use_vad
-        self.last_segment = None
-        self.last_received_segment = None
+        self.use_custom_model = use_custom_model
+        self.callback = callback
 
         if translate:
             self.task = "translate"
@@ -136,26 +169,34 @@ class Client:
         """
         message = json.loads(message)
 
+        keys = message.keys()
+
         if self.uid != message.get("uid"):
             print("[ERROR]: invalid client uid")
             return
 
-        if "status" in message.keys():
-            self.handle_status_messages(message)
+        if "status" in keys:
+            if message["status"] == "WAIT":
+                self.waiting = True
+                print(
+                    f"[INFO]:Server is full. Estimated wait time {round(message['message'])} minutes."
+                )
+            elif message["status"] == "ERROR":
+                print(f"Message from Server: {message['message']}")
+                self.server_error = True
             return
 
-        if "message" in message.keys() and message["message"] == "DISCONNECT":
-            print("[INFO]: Server disconnected due to overtime.")
+        if "message" in keys and message["message"] == "DISCONNECT":
+            print("[INFO]: Server overtime disconnected.")
             self.recording = False
 
-        if "message" in message.keys() and message["message"] == "SERVER_READY":
-            self.last_response_received = time.time()
+        if "message" in keys and message["message"] == "SERVER_READY":
             self.recording = True
             self.server_backend = message["backend"]
             print(f"[INFO]: Server Running with backend {self.server_backend}")
             return
 
-        if "language" in message.keys():
+        if "language" in keys:
             self.language = message.get("language")
             lang_prob = message.get("language_prob")
             print(
@@ -163,8 +204,34 @@ class Client:
             )
             return
 
-        if "segments" in message.keys():
-            self.process_segments(message["segments"])
+        if "segments" not in keys:
+            return
+
+        message = message["segments"]
+        text = []
+        if len(message):
+            for seg in message:
+                if text and text[-1] == seg["text"]:
+                    # already got it
+                    continue
+                text.append(seg["text"])
+        # keep only last 3
+        if len(text) > 3:
+            text = text[-3:]
+        wrapper = textwrap.TextWrapper(width=60)
+        word_list = wrapper.wrap(text="".join(text))
+
+        self.callback(word_list)
+    
+        # Print each line.
+        # if os.name == "nt":
+        #     os.system("cls")
+        # else:
+        #     os.system("clear")
+        # for element in word_list:
+        #     print(element)
+
+        self.__messages__.append(word_list)
 
     def on_error(self, ws, error):
         print(f"[ERROR] WebSocket Error: {error}")
@@ -188,6 +255,8 @@ class Client:
 
         """
         print("[INFO]: Opened connection")
+
+        self.__messages__.clear()
         ws.send(
             json.dumps(
                 {
@@ -587,6 +656,45 @@ class TranscriptionClient(TranscriptionTeeClient):
         transcription_client()
         ```
     """
-    def __init__(self, host, port, lang=None, translate=False, model="small", use_vad=True):
-        self.client = Client(host, port, lang, translate, model, srt_file_path="output.srt", use_vad=use_vad)
-        TranscriptionTeeClient.__init__(self, [self.client])
+    def __init__(
+        self,
+        host,
+        port,
+        is_multilingual=False,
+        lang=None,
+        translate=False,
+        model_size="small",
+        use_custom_model=False,
+        callback: Callable[[list[str]], any]=None
+    ):
+        self.client = Client(host, port, is_multilingual, lang, translate, model_size, use_custom_model, callback)
+
+    def __call__(self, audio=None, hls_url=None):
+        """
+        Start the transcription process.
+
+        Initiates the transcription process by connecting to the server via a WebSocket. It waits for the server
+        to be ready to receive audio data and then sends audio for transcription. If an audio file is provided, it 
+        will be played and streamed to the server; otherwise, it will perform live recording.
+
+        Args:
+            audio (str, optional): Path to an audio file for transcription. Default is None, which triggers live recording.
+                   
+        """
+        print("[INFO]: Waiting for server ready ...")
+        while not self.client.recording:
+            if self.client.waiting or self.client.server_error:
+                self.client.close_websocket()
+                return
+
+        print("[INFO]: Server Ready!")
+        if hls_url is not None:
+            self.client.process_hls_stream(hls_url)
+        elif audio is not None:
+            resampled_file = resample(audio)
+            self.client.play_file(resampled_file)
+        else:
+            self.client.record()
+
+    def transcribed_messages(self) -> list[list[str]]:
+        return self.client.total_messages()

@@ -263,9 +263,23 @@ class TranscriptionServer:
         Raises:
             Exception: If there is an error during the audio frame processing.
         """
-        self.backend = backend
-        if not self.handle_new_connection(websocket, faster_whisper_custom_model_path,
-                                          whisper_tensorrt_path, trt_multilingual):
+        logging.info("New client connected")
+        options = websocket.recv()
+        options = json.loads(options)
+
+        logging.info(f"with options {options}")
+
+        if len(self.clients) >= self.max_clients:
+            logging.warning("Client Queue Full. Asking client to wait ...")
+            wait_time = self.get_wait_time()
+            response = {
+                "uid": options["uid"],
+                "status": "WAIT",
+                "message": wait_time,
+            }
+            websocket.send(json.dumps(response))
+            websocket.close()
+            del websocket
             return
 
         try:
@@ -282,13 +296,16 @@ class TranscriptionServer:
                 websocket.close()
             del websocket
 
-    def run(self,
-            host,
-            port=9090,
-            backend="tensorrt",
-            faster_whisper_custom_model_path=None,
-            whisper_tensorrt_path=None,
-            trt_multilingual=False):
+            except Exception as e:
+                logging.info(f"[ERROR]: Client with uid '{self.clients[websocket].client_uid}' Disconnected.")
+                if self.clients[websocket].model_size_or_path is not None:
+                    self.clients[websocket].cleanup()
+                self.clients.pop(websocket)
+                self.clients_start_time.pop(websocket)
+                del websocket
+                break
+
+    def run(self, host, port=9090, custom_model_path=None):
         """
         Run the transcription server.
 
