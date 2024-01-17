@@ -1,3 +1,5 @@
+import asyncio
+import inspect
 import os
 import wave
 
@@ -228,7 +230,10 @@ class Client:
         current_word_list_hash = hash(immutable_word_list)
 
         if latest_word_list_hash != current_word_list_hash:
-            self.callback(immutable_word_list)
+            if inspect.iscoroutinefunction(self.callback):
+                asyncio.run(self.callback(immutable_word_list))
+            else:
+                self.callback(immutable_word_list)
 
         self.__messages__.append(immutable_word_list)
 

@@ -1,0 +1,16 @@
+version: '3.10'
+
+services:
+  transcribe-server:
+    build: 
+      context: .
+      dockerfile: ./docker/Dockerfile.cpu
+    ports:
+      - "9090:9090"
+
+  transcribe-ws:
+    build: 
+      context: .
+      dockerfile: ./docker/Dockerfile.client
+    ports:
+      - "8765:8765"
