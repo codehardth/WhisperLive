@@ -2,3 +2,5 @@ PyAudio
 ffmpeg-python
 scipy
 websocket-client
+websockets==12.0
+asyncio
