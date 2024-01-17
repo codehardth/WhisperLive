@@ -1,0 +1,49 @@
+FROM ubuntu:focal
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Remove any third-party apt sources to avoid issues with expiring keys.
+RUN rm -f /etc/apt/sources.list.d/*.list
+
+# Install some basic utilities.
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    sudo \
+    git \
+    bzip2 \
+    libx11-6 \
+    wget \
+    portaudio19-dev \ 
+    python-all-dev \
+    gcc \
+    ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN apt update
+
+# Install Python 3.11 from the deadsnakes PPA
+RUN apt install -y software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt update && \
+    apt install -y python3.11 python3.11-dev
+
+# install pip
+# RUN apt install -y python3-pip
+RUN wget https://bootstrap.pypa.io/get-pip.py
+RUN python3.11 get-pip.py
+
+# Create a working directory.
+RUN mkdir /app
+WORKDIR /app
+
+COPY setup.sh /app
+COPY requirements/ /app
+
+# RUN bash setup.sh
+RUN python3.11 -m pip install -r client.txt
+
+COPY whisper_live /app/whisper_live
+COPY client_socket.py /app
+
+CMD ["python3.11", "client_socket.py"]
