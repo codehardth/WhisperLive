@@ -1,3 +1,4 @@
+import os
 import websockets
 import time
 import threading
@@ -181,7 +182,7 @@ class TranscriptionServer:
         Args:
             websocket: The websocket to receive audio from.
 
-    def recv_audio(self, websocket, backend="tensorrt", whisper_tensorrt_path=None):
+    def recv_audio(self, websocket, backend="tensorrt", whisper_tensorrt_path=None, multilingual=False):
         """
         Receive audio chunks from a client in an infinite loop.
 
@@ -235,11 +236,11 @@ class TranscriptionServer:
                 self.backend = "tensorrt"
                 client = ServeClientTensorRT(
                     websocket,
-                    multilingual=options["multilingual"],
+                    multilingual=multilingual,
                     language=options["language"],
                     task=options["task"],
                     client_uid=options["uid"],
-                    model_path=whisper_tensorrt_path
+                    model=whisper_tensorrt_path
                 )
                 logging.info(f"Running TensorRT backend.")
             except Exception as e:
@@ -255,13 +256,17 @@ class TranscriptionServer:
                 self.backend = "faster_whisper"
 
         if self.backend == "faster_whisper":
+            # validate custom model
+            if faster_whisper_custom_model_path is not None and os.path.exists(faster_whisper_custom_model_path):
+                logging.info(f"Using custom model {faster_whisper_custom_model_path}")
+                options["model"] = faster_whisper_custom_model_path
             client = ServeClientFasterWhisper(
                 websocket,
                 multilingual=options["multilingual"],
                 language=options["language"],
                 task=options["task"],
                 client_uid=options["uid"],
-                model_size=options["model_size"],
+                model=options["model"],
                 initial_prompt=options.get("initial_prompt"),
                 vad_parameters=options.get("vad_parameters")
             )
@@ -276,7 +281,7 @@ class TranscriptionServer:
                 frame_data = websocket.recv()
                 frame_np = np.frombuffer(frame_data, dtype=np.float32)
 
-                # VAD
+                # VAD, for faster_whisper VAD model is already integrated
                 if self.backend == "tensorrt":
                     try:
                         speech_prob = self.vad_model(torch.from_numpy(frame_np.copy()), self.RATE).item()
@@ -285,7 +290,7 @@ class TranscriptionServer:
                             if no_voice_activity_chunks > 3:
                                 if not self.clients[websocket].eos:
                                     self.clients[websocket].set_eos(True)
-                                time.sleep(0.1)    # EOS stop receiving frames for a 100ms(to send output to LLM.)
+                                time.sleep(0.1)    # Sleep 100m; wait some voice activity.
                             continue
                         no_voice_activity_chunks = 0
                         self.clients[websocket].set_eos(False)
@@ -299,7 +304,7 @@ class TranscriptionServer:
                 elapsed_time = time.time() - self.clients_start_time[websocket]
                 if elapsed_time >= self.max_connection_time:
                     self.clients[websocket].disconnect()
-                    logging.warning(f"{self.clients[websocket]} Client disconnected due to overtime.")
+                    logging.warning(f"Client with uid '{self.clients[websocket].client_uid}' disconnected due to overtime.")
                     self.clients[websocket].cleanup()
                     self.clients.pop(websocket)
                     self.clients_start_time.pop(websocket)
@@ -321,12 +326,10 @@ class TranscriptionServer:
                 self.clients[websocket].cleanup()
                 self.clients.pop(websocket)
                 self.clients_start_time.pop(websocket)
-                logging.info("Connection Closed.")
-                logging.info(self.clients)
                 del websocket
                 break
 
-    def run(self, host, port=9090, backend="tensorrt", whisper_tensorrt_path=None):
+    def run(self, host, port=9090, backend="tensorrt", whisper_tensorrt_path=None, multilingual=False):
         """
         Run the transcription server.
 
@@ -338,7 +341,8 @@ class TranscriptionServer:
             functools.partial(
                 self.recv_audio,
                 backend=backend,
-                whisper_tensorrt_path=whisper_tensorrt_path
+                whisper_tensorrt_path=whisper_tensorrt_path,
+                multilingual=multilingual
             ),
             host,
             port
@@ -355,6 +359,10 @@ class TranscriptionServer:
         speech detection to improve subsequent processing steps.
 
 class ServeClientBase(object):
+    RATE = 16000
+    SERVER_READY = "SERVER_READY"
+    DISCONNECT = "DISCONNECT"
+
     def __init__(self, client_uid, websocket):
         self.client_uid = client_uid
         self.websocket = websocket
@@ -438,7 +446,6 @@ class ServeClientBase(object):
         """
         logging.info("Cleaning up.")
         self.exit = True
-        self.transcriber.destroy()
 
 
 class ServeClientTensorRT(ServeClientBase):
@@ -470,10 +477,6 @@ class ServeClientTensorRT(ServeClientBase):
         pick_previous_segments (int): Number of previous segments to include in the output.
         websocket: The WebSocket connection for the client.
     """
-    RATE = 16000
-    SERVER_READY = "SERVER_READY"
-    DISCONNECT = "DISCONNECT"
-
     def __init__(
         self,
         websocket,
@@ -482,7 +485,7 @@ class ServeClientTensorRT(ServeClientBase):
         multilingual=False,
         language=None, 
         client_uid=None,
-        model_path=None
+        model=None
         ):
         """
         Initialize a ServeClient instance.
@@ -504,7 +507,7 @@ class ServeClientTensorRT(ServeClientBase):
         self.task = task
         self.eos = False
         self.transcriber = WhisperTRTLLM(
-            model_path, 
+            model, 
             assets_dir="assets", 
             device="cuda",
             is_multilingual=multilingual,
@@ -665,10 +668,6 @@ class ServeClientFasterWhisper(ServeClientBase):
         pick_previous_segments (int): Number of previous segments to include in the output.
         websocket: The WebSocket connection for the client.
     """
-    RATE = 16000
-    SERVER_READY = "SERVER_READY"
-    DISCONNECT = "DISCONNECT"
-
     def __init__(
         self,
         websocket,
@@ -677,7 +676,7 @@ class ServeClientFasterWhisper(ServeClientBase):
         multilingual=False,
         language=None,
         client_uid=None,
-        model_size="small",
+        model="small",
         initial_prompt=None,
         vad_parameters=None
         ):
@@ -702,7 +701,10 @@ class ServeClientFasterWhisper(ServeClientBase):
             "medium", "medium.en", "large-v2", "large-v3",
         ]
         self.multilingual = multilingual
-        self.model_size = self.get_model_size(model_size)
+        if not os.path.exists(model):
+            self.model_size_or_path = self.get_model_size(model)
+        else:
+            self.model_size_or_path = model
         self.language = language if self.multilingual else "en"
         self.task = task
         self.initial_prompt = initial_prompt
@@ -711,11 +713,11 @@ class ServeClientFasterWhisper(ServeClientBase):
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        if self.model_size == None:
+        if self.model_size_or_path == None:
             return
 
         self.transcriber = WhisperModel(
-            self.model_size, 
+            self.model_size_or_path, 
             device=device,
             compute_type="int8" if device == "cpu" else "float16",
             local_files_only=False,
@@ -839,10 +841,10 @@ class ServeClientFasterWhisper(ServeClientBase):
                         })
                     )
                 except Exception as e:
-                    logging.error(f"[ERROR]: {e}")
+                    logging.error(f"[ERROR]: Failed to send message to client: {e}")
 
             except Exception as e:
-                logging.error(f"[ERROR]: {e}")
+                logging.error(f"[ERROR]: Failed to transcribe audio chunk: {e}")
                 time.sleep(0.01)
 
     def format_segment(self, start, end, text):
