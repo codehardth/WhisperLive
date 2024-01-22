@@ -1,20 +1,26 @@
+import asyncio
 from whisper_live.client import TranscriptionClient
 
-def handler(data : frozenset[str]) -> any:
+async def handler(data : frozenset[str]):
     print(data)
+
+    await asyncio.sleep(100)
+
+fun = handler
 
 client = TranscriptionClient(
     "localhost",
     9090,
     is_multilingual=True,
-    lang="en",
+    lang="th",
     translate=False,
-    model_size="small",
+    model_size="large-v2",
     callback=handler,
-    replay_playback=False
+    replay_playback=True,
+    timeout_second=300
 )
 
-file="./tests/jfk.flac"
+file="/home/deszolate/Downloads/pyut.mp3"
 client(audio=file)
 
 print(list(map(lambda fl: list(fl), client.transcribed_messages())))

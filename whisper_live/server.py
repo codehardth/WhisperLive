@@ -14,8 +14,9 @@ import torch
 import numpy as np
 import time
 import functools
-
+from whisper_live.abstraction.transcriber_base import TranscriberBase
 from whisper_live.transcriber import WhisperModel
+from whisper_live.whisperx_transcriber import WhisperXModel
 
 
 class TranscriptionServer:
@@ -247,16 +248,19 @@ class ServeClient:
         self.vad_parameters = vad_parameters or {"threshold": 0.5}
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        compute_type = "int8" if device=="cpu" else "float16"
         
         if self.model_size_or_path == None:
             return
         
-        self.transcriber = WhisperModel(
-            self.model_size_or_path,
-            device=device,
-            compute_type="int8" if device=="cpu" else "float16", 
-            local_files_only=False,
-        )
+        self.transcriber = CreateTranscriber(
+            type="whisperx", 
+            model=self.model_size_or_path,
+            compute_type=compute_type,
+            align_model="wannaphong/wav2vec2-large-xlsr-53-th-cv8-deepcut",
+            language="th",
+            device=device)
         
         self.timestamp_offset = 0.0
         self.frames_np = None
@@ -376,14 +380,9 @@ class ServeClient:
             try:
                 input_sample = input_bytes.copy()
                 
-                # whisper transcribe with prompt
                 result, info = self.transcriber.transcribe(
-                    input_sample, 
-                    initial_prompt=self.initial_prompt,
-                    language=self.language,
-                    task=self.task,
-                    vad_filter=True,
-                    vad_parameters=self.vad_parameters
+                    audio=input_sample,
+                    batch_size=4
                 )
 
                 if self.language is None:
@@ -539,3 +538,26 @@ class ServeClient:
         """
         logging.info("Cleaning up.")
         self.exit = True
+
+def CreateTranscriber(type: str, model: str, **kwargs) -> TranscriberBase:
+    compute_type = kwargs.get("compute_type", "int8")
+    device = kwargs.get("device", "cpu")
+
+    match type:
+        case "whisperx":
+            align_model = kwargs.get("align_model")
+            language = kwargs.get("language")
+            return WhisperXModel(
+                compute_type=compute_type,
+                align_model=align_model,
+                language=language,
+                model=model,
+                device=device
+            )
+        case _:
+            return WhisperModel(
+                model_size_or_path=model,
+                device=device,
+                compute_type=compute_type,
+                local_files_only=False
+            )
