@@ -14,7 +14,7 @@ import websocket
 import uuid
 import time
 
-from typing import Callable
+from typing import Callable, Coroutine
 
 
 def resample(file: str, sr: int = 16000):
@@ -67,8 +67,9 @@ class Client:
         translate=False,
         model_size="small",
         use_custom_model=False,
-        callback: Callable[[frozenset[str]], any]=None,
+        callback: Callable[[frozenset[str]], any] | Coroutine[any, any, None]=None,
         replay_playback: bool=False,
+        timeout_second: int=15
     ):
         """
         Initializes a Client instance for audio recording and streaming to a server.
@@ -96,7 +97,7 @@ class Client:
         self.uid = str(uuid.uuid4())
         self.waiting = False
         self.last_response_recieved = None
-        self.disconnect_if_no_response_for = 15
+        self.disconnect_if_no_response_for = timeout_second
         self.multilingual = is_multilingual
         self.language = lang
         self.model = model
@@ -547,10 +548,20 @@ class TranscriptionClient:
         translate=False,
         model_size="small",
         use_custom_model=False,
-        callback: Callable[[frozenset[str]], any]=None,
+        callback: Callable[[frozenset[str]], any] | Coroutine[any, any, None] =None,
         replay_playback: bool=False,
+        timeout_second: int=15
     ):
-        self.client = Client(host, port, is_multilingual, lang, translate, model_size, use_custom_model, callback, replay_playback)
+        self.client = Client(
+            host, 
+            port,
+            is_multilingual, 
+            lang, translate, 
+            model_size, 
+            use_custom_model, 
+            callback, 
+            replay_playback,
+            timeout_second)
 
     def __call__(self, audio=None, hls_url=None):
         """
