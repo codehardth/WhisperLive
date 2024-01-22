@@ -6,8 +6,7 @@ import logging
 import os
 import zlib
 
-from inspect import signature
-from typing import BinaryIO, Iterable, List, NamedTuple, Optional, Tuple, Union
+from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
 
 import ctranslate2
 import numpy as np
@@ -24,66 +23,10 @@ from faster_whisper.vad import (
     get_speech_timestamps,
 )
 
-
-class Word(NamedTuple):
-    start: float
-    end: float
-    word: str
-    probability: float
+from whisper_live.abstraction.transcriber_base import Segment, TranscriberBase, TranscriptionInfo, TranscriptionOptions, Word
 
 
-class Segment(NamedTuple):
-    id: int
-    seek: int
-    start: float
-    end: float
-    text: str
-    tokens: List[int]
-    temperature: float
-    avg_logprob: float
-    compression_ratio: float
-    no_speech_prob: float
-    words: Optional[List[Word]]
-
-
-class TranscriptionOptions(NamedTuple):
-    beam_size: int
-    best_of: int
-    patience: float
-    length_penalty: float
-    repetition_penalty: float
-    no_repeat_ngram_size: int
-    log_prob_threshold: Optional[float]
-    no_speech_threshold: Optional[float]
-    compression_ratio_threshold: Optional[float]
-    condition_on_previous_text: bool
-    prompt_reset_on_temperature: float
-    temperatures: List[float]
-    initial_prompt: Optional[Union[str, Iterable[int]]]
-    prefix: Optional[str]
-    suppress_blank: bool
-    suppress_tokens: Optional[List[int]]
-    without_timestamps: bool
-    max_initial_timestamp: float
-    word_timestamps: bool
-    prepend_punctuations: str
-    append_punctuations: str
-    max_new_tokens: Optional[int]
-    clip_timestamps: Union[str, List[float]]
-    hallucination_silence_threshold: Optional[float]
-
-
-class TranscriptionInfo(NamedTuple):
-    language: str
-    language_probability: float
-    duration: float
-    duration_after_vad: float
-    all_language_probs: Optional[List[Tuple[str, float]]]
-    transcription_options: TranscriptionOptions
-    vad_options: VadOptions
-
-
-class WhisperModel:
+class WhisperModel(TranscriberBase):
     def __init__(
         self,
         model_size_or_path: str,
@@ -182,8 +125,69 @@ class WhisperModel:
                 )
 
         return config
+    
+    def transcribe(
+            self,
+            audio,
+            **kwargs
+    ):
+        language = kwargs.get("language", None)
+        task = kwargs.get("task", "transcribe")
+        beam_size = kwargs.get("beam_size", 5)
+        best_of = kwargs.get("best_of", 5)
+        patience = kwargs.get("patience", 1)
+        length_penalty = kwargs.get("length_penalty", 1)
+        repetition_penalty = kwargs.get("repetition_penalty", 1)
+        no_repeat_ngram_size = kwargs.get("no_repeat_ngram_size", 0)
+        temperature = kwargs.get("temperature", [0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+        compression_ratio_threshold = kwargs.get("compression_ratio_threshold", 2.4)
+        log_prob_threshold = kwargs.get("log_prob_threshold", -1.0)
+        no_speech_threshold = kwargs.get("no_speech_threshold", 0.6)
+        condition_on_previous_text = kwargs.get("condition_on_previous_text", True)
+        prompt_reset_on_temperature = kwargs.get("prompt_reset_on_temperature", 0.5)
+        initial_prompt = kwargs.get("initial_prompt", None)
+        prefix = kwargs.get("prefix", None)
+        suppress_blank = kwargs.get("suppress_blank", True)
+        suppress_tokens = kwargs.get("suppress_tokens", [-1])
+        without_timestamps = kwargs.get("without_timestamps", False)
+        max_initial_timestamp = kwargs.get("max_initial_timestamp", 1.0)
+        word_timestamps = kwargs.get("word_timestamps", False)
+        prepend_punctuations = kwargs.get("prepend_punctuations", "\"'“¿([{-")
+        append_punctuations = kwargs.get("append_punctuations", "\"'.。,，!！?？:：”)]}、")
+        vad_filter = kwargs.get("vad_filter", False)
+        vad_parameters = kwargs.get("vad_parameters", None)
 
-    def transcribe(                                                         # noqa: C901
+        return self.__transcribeImplementation(
+            self,
+            audio,
+            language,
+            task,
+            beam_size,
+            best_of,
+            patience,
+            length_penalty,
+            repetition_penalty,
+            no_repeat_ngram_size,
+            temperature,
+            compression_ratio_threshold,
+            log_prob_threshold,
+            no_speech_threshold,
+            condition_on_previous_text,
+            prompt_reset_on_temperature,
+            initial_prompt,
+            prefix,
+            suppress_blank,
+            suppress_tokens,
+            without_timestamps,
+            max_initial_timestamp,
+            word_timestamps,
+            prepend_punctuations,
+            append_punctuations,
+            vad_filter,
+            vad_parameters
+        )
+
+    def __transcribeImplementation(
         self,
         audio: Union[str, BinaryIO, np.ndarray],
         language: Optional[str] = None,

@@ -16,9 +16,11 @@ import queue
 from whisper_live.vad import VoiceActivityDetection
 from scipy.io.wavfile import write
 import functools
+from whisper_live.abstraction.transcriber_base import TranscriberBase
 
 from whisper_live.vad import VoiceActivityDetection
 from whisper_live.transcriber import WhisperModel
+from whisper_live.whisperx_transcriber import WhisperXModel
 try:
     from whisper_live.transcriber_tensorrt import WhisperTRTLLM
 except Exception as e:
@@ -709,16 +711,37 @@ class ServeClientFasterWhisper(ServeClientBase):
         self.no_speech_thresh = 0.45
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        compute_type = "int8" if device=="cpu" else "float16"
         
         if self.model_size_or_path == None:
             return
+        
+        self.transcriber = CreateTranscriber(
+            type="whisperx", 
+            model=self.model_size_or_path,
+            compute_type=compute_type,
+            align_model="wannaphong/wav2vec2-large-xlsr-53-th-cv8-deepcut",
+            language="th",
+            device=device)
+        
+        self.timestamp_offset = 0.0
+        self.frames_np = None
+        self.frames_offset = 0.0
+        self.text = []
+        self.current_out = ''
+        self.prev_out = ''
+        self.t_start=None
+        self.exit = False
+        self.same_output_threshold = 0
+        self.show_prev_out_thresh = 5   # if pause(no output from whisper) show previous output for 5 seconds
+        self.add_pause_thresh = 3       # add a blank to segment list as a pause(no speech) for 3 seconds
+        self.transcript = []
+        self.send_last_n_segments = 10
 
-        self.transcriber = WhisperModel(
-            self.model_size_or_path, 
-            device=device,
-            compute_type="int8" if device == "cpu" else "float16",
-            local_files_only=False,
-        )
+        # text formatting
+        self.wrapper = textwrap.TextWrapper(width=50)
+        self.pick_previous_segments = 2
 
         # threading
         self.trans_thread = threading.Thread(target=self.speech_to_text)
@@ -794,7 +817,11 @@ class ServeClientFasterWhisper(ServeClientBase):
                 continue
             try:
                 input_sample = input_bytes.copy()
-                result = self.transcribe_audio(input_sample)
+                
+                result, info = self.transcriber.transcribe(
+                    audio=input_sample,
+                    batch_size=4
+                )
 
                 if self.language is None:
                     if info.language_probability > 0.5:
@@ -936,3 +963,55 @@ class ServeClientFasterWhisper(ServeClientBase):
             self.timestamp_offset += offset
 
         return last_segment
+    
+    def disconnect(self):
+        """
+        Notify the client of disconnection and send a disconnect message.
+
+        This method sends a disconnect message to the client via the WebSocket connection to notify them
+        that the transcription service is disconnecting gracefully.
+
+        """
+        self.websocket.send(
+            json.dumps(
+                {
+                    "uid": self.client_uid,
+                    "message": self.DISCONNECT
+                }
+            )
+        )
+    
+    def cleanup(self):
+        """
+        Perform cleanup tasks before exiting the transcription service.
+
+        This method performs necessary cleanup tasks, including stopping the transcription thread, marking
+        the exit flag to indicate the transcription thread should exit gracefully, and destroying resources
+        associated with the transcription process.
+
+        """
+        logging.info("Cleaning up.")
+        self.exit = True
+
+def CreateTranscriber(type: str, model: str, **kwargs) -> TranscriberBase:
+    compute_type = kwargs.get("compute_type", "int8")
+    device = kwargs.get("device", "cpu")
+
+    match type:
+        case "whisperx":
+            align_model = kwargs.get("align_model")
+            language = kwargs.get("language")
+            return WhisperXModel(
+                compute_type=compute_type,
+                align_model=align_model,
+                language=language,
+                model=model,
+                device=device
+            )
+        case _:
+            return WhisperModel(
+                model_size_or_path=model,
+                device=device,
+                compute_type=compute_type,
+                local_files_only=False
+            )
