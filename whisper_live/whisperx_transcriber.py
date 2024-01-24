@@ -13,7 +13,7 @@ class WhisperXModel(TranscriberBase):
     def __init__(
         self,
         compute_type: str,
-        align_model: str | None = None,
+        align_model: str = None,
         language: str = "en",
         model: str = "base",
         device: str = "cpu"

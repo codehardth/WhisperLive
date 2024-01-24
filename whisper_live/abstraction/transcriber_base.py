@@ -66,5 +66,5 @@ class TranscriberBase:
             self, 
             audio: Union[str, BinaryIO, np.ndarray], 
             **kwargs
-    ) -> tuple[list[Segment], TranscriptionInfo]:
+    ) -> Tuple[List[Segment], TranscriptionInfo]:
         pass

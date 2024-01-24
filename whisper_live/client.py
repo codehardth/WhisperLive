@@ -11,7 +11,7 @@ import websocket
 import uuid
 import time
 
-from typing import Callable, Coroutine
+from typing import Callable, Coroutine, List, FrozenSet
 
 
 def resample(file: str, sr: int = 16000):
@@ -51,9 +51,9 @@ class Client:
     INSTANCES = {}
     END_OF_AUDIO = "END_OF_AUDIO"
 
-    __messages__ : list[frozenset[str]] = []
+    __messages__ : List[FrozenSet[str]] = []
 
-    def total_messages(self) -> list[frozenset[str]]:
+    def total_messages(self) -> List[FrozenSet[str]]:
         return self.__messages__
 
     def __init__(
@@ -64,7 +64,7 @@ class Client:
         translate=False,
         model_size="small",
         use_custom_model=False,
-        callback: Callable[[frozenset[str]], any] | Coroutine[any, any, None]=None,
+        callback: any = None,
         replay_playback: bool=False,
         timeout_second: int=15
     ):
@@ -673,7 +673,7 @@ class TranscriptionClient(TranscriptionTeeClient):
         translate=False,
         model_size="small",
         use_custom_model=False,
-        callback: Callable[[frozenset[str]], any] | Coroutine[any, any, None] =None,
+        callback: any = None,
         replay_playback: bool=False,
         timeout_second: int=15
     ):
@@ -715,5 +715,5 @@ class TranscriptionClient(TranscriptionTeeClient):
         else:
             self.client.record()
 
-    def transcribed_messages(self) -> list[frozenset[str]]:
+    def transcribed_messages(self) -> List[FrozenSet[str]]:
         return self.client.total_messages()

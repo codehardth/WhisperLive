@@ -158,7 +158,6 @@ class WhisperModel(TranscriberBase):
         vad_parameters = kwargs.get("vad_parameters", None)
 
         return self.__transcribeImplementation(
-            self,
             audio,
             language,
             task,
