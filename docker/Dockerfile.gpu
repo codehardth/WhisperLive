@@ -39,6 +39,7 @@ COPY requirements/ /app
 RUN apt update --fix-missing
 RUN bash setup.sh
 RUN pip install -r server.txt
+RUN pip install git+https://github.com/m-bain/whisperx.git
 
 COPY whisper_live /app/whisper_live
 

@@ -1,0 +1,27 @@
+version: '3.10'
+
+services:
+  transcription-server:
+    build: 
+      context: .
+      dockerfile: ./docker/Dockerfile.gpu
+    ports:
+      - "9090:9090"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+  test:
+    image: nvidia/cuda:12.3.1-base-ubuntu20.04
+    command: nvidia-smi
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
