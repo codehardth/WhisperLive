@@ -1,4 +1,6 @@
 import asyncio
+import ctypes
+import datetime
 import inspect
 import os
 import wave
@@ -13,8 +15,14 @@ import json
 import websocket
 import uuid
 import time
+import multiprocessing
 
-from typing import Callable, Coroutine, List, FrozenSet
+from formatters.custom_formatter import CustomFormatter
+
+import logging
+logging.basicConfig(level = logging.INFO)
+
+from typing import Callable, Coroutine, Iterable, List, FrozenSet
 
 
 def resample(file: str, sr: int = 16000):
@@ -69,7 +77,8 @@ class Client:
         use_custom_model=False,
         callback: any = None,
         replay_playback: bool=False,
-        timeout_second: int=15
+        timeout_second: int=15,
+        playback_device_index: int=None,
     ):
         """
         Initializes a Client instance for audio recording and streaming to a server.
@@ -112,12 +121,17 @@ class Client:
         self.timestamp_offset = 0.0
         self.audio_bytes = None
         self.p = pyaudio.PyAudio()
+
+        default_input = None if playback_device_index is None else self.p.get_device_info_by_index(playback_device_index)
+        playback_index = None if default_input is None else default_input.get('index')
+        channels = 1 #None if default_input is None else default_input.get('maxOutputChannels')
         self.stream = self.p.open(
             format=self.format,
-            channels=self.channels,
+            channels=channels,
             rate=self.rate,
             input=True,
             frames_per_buffer=self.chunk,
+            input_device_index=playback_index,
         )
 
         if host is not None and port is not None:
@@ -516,6 +530,8 @@ class Client:
 
 
 class TranscriptionClient:
+    __task: threading.Thread
+
     """
     Client for handling audio transcription tasks via a WebSocket connection.
 
@@ -550,7 +566,8 @@ class TranscriptionClient:
         use_custom_model=False,
         callback: any = None,
         replay_playback: bool=False,
-        timeout_second: int=15
+        timeout_second: int=15,
+        playback_device_index: int=0,
     ):
         self.client = Client(
             host, 
@@ -561,7 +578,53 @@ class TranscriptionClient:
             use_custom_model, 
             callback, 
             replay_playback,
-            timeout_second)
+            timeout_second,
+            playback_device_index)
+        
+    def start(self, audio=None, hls_url=None):
+        """
+        Start the transcription process.
+
+        Initiates the transcription process by connecting to the server via a WebSocket. It waits for the server
+        to be ready to receive audio data and then sends audio for transcription. If an audio file is provided, it 
+        will be played and streamed to the server; otherwise, it will perform live recording.
+
+        Args:
+            audio (str, optional): Path to an audio file for transcription. Default is None, which triggers live recording.
+                   
+        """
+
+        def runner():
+            print("[INFO]: Waiting for server ready ...")
+            while not self.client.recording:
+                if self.client.waiting or self.client.server_error:
+                    self.client.close_websocket()
+                    return
+
+            print("[INFO]: Server Ready!")
+            if hls_url is not None:
+                self.client.process_hls_stream(hls_url)
+            elif audio is not None:
+                resampled_file = resample(audio)
+                self.client.play_file(resampled_file)
+            else:
+                self.client.record()
+
+        self.__task = threading.Thread(target=runner)
+        self.__task.start()
+    
+    def stop(self):
+        print("[INFO]: Stopping...")
+        if self.__task.is_alive():
+            self.client.recording = False
+            self.client.close_websocket()
+            thread_id = self.__task.ident
+            res = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(SystemExit))
+            if res > 1:
+                ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
+                print('[ERR]: Exception raise failure')
+
+        print("[INFO]: Stopped...")
 
     def __call__(self, audio=None, hls_url=None):
         """

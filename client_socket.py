@@ -1,34 +1,43 @@
 import asyncio
 import json
+from websockets import WebSocketServerProtocol
 from websockets.server import serve
+from websockets.protocol import State
 
 from whisper_live.client import TranscriptionClient
 
 file = "./tests/jfk.flac"
 
-async def echo(websocket):
+async def echo(websocket: WebSocketServerProtocol):
     async def handler(data : frozenset[str]) -> any:        
         list = [e for e in data]
         res = json.dumps({
             'messages': list
-        })
-
-        print(res)
+        }, ensure_ascii=False)
 
         await websocket.send(res)
 
+    headers = websocket.request_headers
+    device_index = int(headers.get('x-device-index'))
+
     client = TranscriptionClient(
-        "localhost",
+        "192.168.0.98",
         9090,
         is_multilingual=True,
         lang="en",
         translate=False,
-        model_size="small",
+        model_size="large-v2",
         callback=handler,
-        replay_playback=False
+        replay_playback=False,
+        playback_device_index=device_index,
     )
 
-    client(audio=file)
+    client.start()
+
+    while websocket.state is State.OPEN:
+        await asyncio.sleep(1)
+
+    client.stop()
 
     await websocket.close()
 
