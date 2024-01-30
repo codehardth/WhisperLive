@@ -16,10 +16,11 @@ client = TranscriptionClient(
     translate=False,
     model_size="large-v2",
     callback=handler,
-    replay_playback=True,
+    replay_playback=False,
     timeout_second=300,
+    playback_device_index=7
 )
 
-client()
+client.start(audio="/home/deszolate/Downloads/overreview_resampled.wav")
 
 print(list(map(lambda fl: list(fl), client.transcribed_messages())))

@@ -51,22 +51,25 @@ class WhisperXModel(TranscriberBase):
 
             language = result["language"]
             segments = result["segments"]
-
-            align_model, metadata = whisperx.load_align_model(
-                language_code=language,
-                device=self.device,
-                model_name=self.align_model,
-                model_dir=self.__cache_model_dir)
-
-            align_result = whisperx.align(
-                segments, 
-                align_model, 
-                metadata, 
-                audio, 
-                self.device, 
-                return_char_alignments=False)
             
-            aligned_segments = align_result["segments"]
+            for e in segments:
+                e["words"] = e["text"]
+
+            # align_model, metadata = whisperx.load_align_model(
+            #     language_code=language,
+            #     device=self.device,
+            #     model_name=self.align_model,
+            #     model_dir=self.__cache_model_dir)
+
+            # align_result = whisperx.align(
+            #     segments, 
+            #     align_model, 
+            #     metadata, 
+            #     audio, 
+            #     self.device, 
+            #     return_char_alignments=False)
+            
+            # aligned_segments = align_result["segments"]
 
             info = TranscriptionInfo(
                 language=language,
@@ -92,7 +95,7 @@ class WhisperXModel(TranscriberBase):
                     words=a['words']
                 )
                 for index, a 
-                in enumerate(aligned_segments)
+                in enumerate(segments)
             ]
 
             return result, info
