@@ -1,5 +1,6 @@
 import asyncio
 import json
+from typing import Tuple
 from websockets import WebSocketServerProtocol
 from websockets.server import serve
 from websockets.protocol import State
@@ -9,7 +10,7 @@ from whisper_live.client import TranscriptionClient
 file = "./tests/jfk.flac"
 
 async def echo(websocket: WebSocketServerProtocol):
-    async def handler(data : frozenset[str]) -> any:        
+    async def handler(data : Tuple) -> any:        
         list = [e for e in data]
         res = json.dumps({
             'messages': list
@@ -24,7 +25,7 @@ async def echo(websocket: WebSocketServerProtocol):
         "192.168.0.98",
         9090,
         is_multilingual=True,
-        lang="en",
+        lang="th",
         translate=False,
         model_size="large-v2",
         callback=handler,

@@ -19,7 +19,7 @@ from formatters.custom_formatter import CustomFormatter
 import logging
 logging.basicConfig(level = logging.INFO)
 
-from typing import Callable, Coroutine, Iterable, List, FrozenSet
+from typing import Callable, Coroutine, Iterable, List, FrozenSet, Tuple
 
 
 def resample(file: str, sr: int = 16000):
@@ -59,7 +59,7 @@ class Client:
     INSTANCES = {}
     END_OF_AUDIO = "END_OF_AUDIO"
 
-    __messages__ : List[FrozenSet[str]] = []
+    __messages__ : List[Tuple[str]] = []
 
     def total_messages(self) -> List[FrozenSet[str]]:
         return self.__messages__
@@ -235,10 +235,10 @@ class Client:
         if "segments" not in keys:
             return
 
-        message = message["segments"]
+        messages = message["segments"]
         text = []
-        if len(message):
-            for seg in message:
+        if len(messages):
+            for seg in messages:
                 if text and text[-1] == seg["text"]:
                     # already got it
                     continue
@@ -248,18 +248,18 @@ class Client:
             text = text[-3:]
         wrapper = textwrap.TextWrapper(width=60)
         word_list = wrapper.wrap(text="".join(text))
-        immutable_word_list = frozenset(word_list)
+        word_tuple = tuple(word_list)
 
         latest_word_list_hash = hash(self.__messages__[-1]) if len(self.__messages__) > 0 else None
-        current_word_list_hash = hash(immutable_word_list)
+        current_word_list_hash = hash(word_tuple)
 
         if latest_word_list_hash != current_word_list_hash:
             if inspect.iscoroutinefunction(self.callback):
-                asyncio.run(self.callback(immutable_word_list))
+                asyncio.run(self.callback(messages))
             else:
-                self.callback(immutable_word_list)
+                self.callback(messages)
 
-        self.__messages__.append(immutable_word_list)
+        self.__messages__.append(word_tuple)
 
     def on_error(self, ws, error):
         print(f"[ERROR] WebSocket Error: {error}")
