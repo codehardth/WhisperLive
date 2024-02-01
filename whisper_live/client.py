@@ -20,6 +20,8 @@ import multiprocessing
 from formatters.custom_formatter import CustomFormatter
 
 import logging
+
+from whisper_live.enums.model_type import ModelType
 logging.basicConfig(level = logging.INFO)
 
 from typing import Callable, Coroutine, Iterable, List, FrozenSet, Tuple
@@ -73,6 +75,7 @@ class Client:
         is_multilingual=False,
         lang=None,
         translate=False,
+        model_type: ModelType = ModelType.Default,
         model_size="small",
         use_custom_model=False,
         callback: any = None,
@@ -109,7 +112,8 @@ class Client:
         self.disconnect_if_no_response_for = timeout_second
         self.multilingual = is_multilingual
         self.language = lang
-        self.model = model
+        self.model_type = model_type
+        self.model_size = model_size
         self.server_error = False
         self.use_custom_model = use_custom_model
         self.callback = callback
@@ -266,7 +270,9 @@ class Client:
                     "multilingual": self.multilingual,
                     "language": self.language,
                     "task": self.task,
-                    "model": self.model,
+                    "type": self.model_type,
+                    "model_size": self.model_size,
+                    "use_custom_model": self.use_custom_model   # if runnning your own server with a custom model
                 }
             )
         )
@@ -562,6 +568,7 @@ class TranscriptionClient:
         is_multilingual=False,
         lang=None,
         translate=False,
+        model_type: ModelType = ModelType.Default,
         model_size="small",
         use_custom_model=False,
         callback: any = None,
@@ -573,7 +580,8 @@ class TranscriptionClient:
             host, 
             port,
             is_multilingual, 
-            lang, translate, 
+            lang, translate,
+            model_type,
             model_size, 
             use_custom_model, 
             callback, 
