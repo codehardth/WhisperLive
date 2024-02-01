@@ -22,7 +22,7 @@ async def echo(websocket: WebSocketServerProtocol):
     device_index = int(headers.get('x-device-index'))
 
     client = TranscriptionClient(
-        "192.168.0.98",
+        "0.0.0.0",
         9090,
         is_multilingual=True,
         lang="th",

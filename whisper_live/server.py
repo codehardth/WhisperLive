@@ -19,8 +19,10 @@ import functools
 from whisper_live.abstraction.transcriber_base import TranscriberBase
 
 from whisper_live.vad import VoiceActivityDetection
-from whisper_live.transcriber import WhisperModel
-from whisper_live.whisperx_transcriber import WhisperXModel
+from whisper_live.enums.model_type import ModelType
+from whisper_live.implementation.thonburian_transcriber import ThonburianTranscriber
+from whisper_live.implementation.transcriber import WhisperModel
+from whisper_live.implementation.whisperx_transcriber import WhisperXModel
 try:
     from whisper_live.transcriber_tensorrt import WhisperTRTLLM
 except Exception as e:
@@ -270,7 +272,8 @@ class TranscriptionServer:
                 language=options["language"],
                 task=options["task"],
                 client_uid=options["uid"],
-                model=options["model"],
+                model_type=ModelType(options["type"]),
+            model=options["model"],
                 initial_prompt=options.get("initial_prompt"),
                 vad_parameters=options.get("vad_parameters")
             )
@@ -675,6 +678,7 @@ class ServeClientFasterWhisper(ServeClientBase):
         multilingual=False,
         language=None,
         client_uid=None,
+        model_type: ModelType = ModelType.Default,
         model="small",
         initial_prompt=None,
         vad_parameters=None
@@ -718,7 +722,7 @@ class ServeClientFasterWhisper(ServeClientBase):
             return
         
         self.transcriber = CreateTranscriber(
-            type="whisperx", 
+            type=model_type, 
             model=self.model_size_or_path,
             compute_type=compute_type,
             align_model="wannaphong/wav2vec2-large-xlsr-53-th-cv8-deepcut",
@@ -810,10 +814,16 @@ class ServeClientFasterWhisper(ServeClientBase):
             if self.frames_np is None:
                 continue
 
-            self.clip_audio_if_no_valid_segment()
-
-            input_bytes, duration = self.get_audio_chunk_for_processing()
-            if duration < 1.0:
+            # clip audio if the current chunk exceeds 30 seconds, this basically implies that
+            # no valid segment for the last 30 seconds from whisper
+            if self.frames_np[int((self.timestamp_offset - self.frames_offset)*self.RATE):].shape[0] > 25 * self.RATE:
+                duration = self.frames_np.shape[0] / self.RATE
+                self.timestamp_offset = self.frames_offset + duration - 5
+    
+            samples_take = max(0, (self.timestamp_offset - self.frames_offset)*self.RATE)
+            input_bytes = self.frames_np[int(samples_take):].copy()
+            duration = input_bytes.shape[0] / self.RATE
+            if duration<3.0:
                 continue
             try:
                 input_sample = input_bytes.copy()
@@ -993,11 +1003,11 @@ class ServeClientFasterWhisper(ServeClientBase):
         logging.info("Cleaning up.")
         self.exit = True
 
-def CreateTranscriber(type: str, model: str, **kwargs) -> TranscriberBase:
+def CreateTranscriber(type: str, model: ModelType, **kwargs) -> TranscriberBase:
     compute_type = kwargs.get("compute_type", "int8")
     device = kwargs.get("device", "cpu")
 
-    if type == "whisperx":
+    if type == ModelType.WhisperX:
         align_model = kwargs.get("align_model")
         language = kwargs.get("language")
         return WhisperXModel(
@@ -1007,10 +1017,18 @@ def CreateTranscriber(type: str, model: str, **kwargs) -> TranscriberBase:
             model=model,
             device=device
         )
-    else:
+    elif type == ModelType.Thonburian:
+        language = kwargs.get("language")
+        return ThonburianTranscriber(
+            language=language,
+            device=device,
+        )
+    elif type == ModelType.Default:
         return WhisperModel(
             model_size_or_path=model,
             device=device,
             compute_type=compute_type,
             local_files_only=False
         )
+    else:
+        raise TypeError

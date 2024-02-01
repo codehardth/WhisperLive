@@ -5,7 +5,7 @@ import gc
 import torch
 from whisper_live.abstraction.transcriber_base import TranscriberBase
 
-from whisper_live.transcriber import Segment, TranscriptionInfo
+from whisper_live.implementation.transcriber import Segment, TranscriptionInfo
 
 class WhisperXModel(TranscriberBase):
     __cache_model_dir : str = "/tmp/whisperx_cache"
