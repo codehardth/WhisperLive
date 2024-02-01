@@ -271,7 +271,7 @@ class Client:
                     "language": self.language,
                     "task": self.task,
                     "type": self.model_type,
-                    "model_size": self.model_size,
+                    "model": self.model_size,
                     "use_custom_model": self.use_custom_model   # if runnning your own server with a custom model
                 }
             )
