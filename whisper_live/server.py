@@ -1006,10 +1006,10 @@ class ServeClientFasterWhisper(ServeClientBase):
 def CreateTranscriber(type: str, model: ModelType, **kwargs) -> TranscriberBase:
     compute_type = kwargs.get("compute_type", "int8")
     device = kwargs.get("device", "cpu")
+    language = kwargs.get("language", None)
 
     if type == ModelType.WhisperX:
         align_model = kwargs.get("align_model")
-        language = kwargs.get("language")
         return WhisperXModel(
             compute_type=compute_type,
             align_model=align_model,
@@ -1018,7 +1018,6 @@ def CreateTranscriber(type: str, model: ModelType, **kwargs) -> TranscriberBase:
             device=device
         )
     elif type == ModelType.Thonburian:
-        language = kwargs.get("language")
         return ThonburianTranscriber(
             language=language,
             device=device,
@@ -1028,7 +1027,8 @@ def CreateTranscriber(type: str, model: ModelType, **kwargs) -> TranscriberBase:
             model_size_or_path=model,
             device=device,
             compute_type=compute_type,
-            local_files_only=False
+            local_files_only=False,
+            language=language
         )
     else:
         raise TypeError

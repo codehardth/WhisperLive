@@ -37,6 +37,7 @@ class WhisperModel(TranscriberBase):
         num_workers: int = 1,
         download_root: Optional[str] = None,
         local_files_only: bool = False,
+        language: str=None
     ):
         """Initializes the Whisper model.
 
@@ -104,6 +105,7 @@ class WhisperModel(TranscriberBase):
         self.input_stride = 2
         self.time_precision = 0.02
         self.max_length = 448
+        self.language = language
 
     @property
     def supported_languages(self) -> List[str]:
@@ -131,7 +133,7 @@ class WhisperModel(TranscriberBase):
             audio,
             **kwargs
     ):
-        language = kwargs.get("language", None)
+        language = self.language
         task = kwargs.get("task", "transcribe")
         beam_size = kwargs.get("beam_size", 5)
         best_of = kwargs.get("best_of", 5)
