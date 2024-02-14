@@ -11,7 +11,7 @@ class Program
         var devices = await transcriptor.GetInputInterfacesAsync().ToListAsync();
         var pulseDevice = devices.Single(d => d.Name == "default");
 
-        await transcriptor.StartAsync(pulseDevice.Index);
+        await transcriptor.StartRecordAsync(pulseDevice.Index);
 
         transcriptor
             .Select(m => m.Text)

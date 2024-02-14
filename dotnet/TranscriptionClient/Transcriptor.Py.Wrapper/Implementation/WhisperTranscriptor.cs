@@ -1,17 +1,18 @@
 using System.Buffers;
 using System.Net.WebSockets;
-using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Transcriptor.Py.Wrapper.Abstraction;
 using Transcriptor.Py.Wrapper.Models;
+using WebSocketSharp.Net;
 using JsonSerializer = System.Text.Json.JsonSerializer;
+using WebSocket = WebSocketSharp.WebSocket;
 
 namespace Transcriptor.Py.Wrapper.Implementation;
 
-public class WhisperTranscriptor : ITranscriptor, IObservable<TranscriptMessage>
+public class WhisperTranscriptor : ITranscriptor
 {
     private static readonly JsonSerializerOptions _serializerOptions = new()
     {
@@ -20,7 +21,8 @@ public class WhisperTranscriptor : ITranscriptor, IObservable<TranscriptMessage>
     };
 
     private readonly Uri _serviceUri;
-    private ClientWebSocket? _socket;
+
+    private WebSocket? _socket;
     private bool _disposed;
 
     public WhisperTranscriptor(Uri serviceUri)
@@ -50,22 +52,85 @@ public class WhisperTranscriptor : ITranscriptor, IObservable<TranscriptMessage>
         }
     }
 
-    public async Task StartAsync(int index, CancellationToken cancellationToken = default)
+    public async Task StartRecordAsync(
+        int index,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default)
     {
         await this.StopAsync(cancellationToken);
 
-        this._socket = new ClientWebSocket();
-        this._socket.Options.SetRequestHeader("x-device-index", index.ToString());
+        this._socket = new WebSocket(this._serviceUri.AbsoluteUri);
+        this._socket.SetCookie(new Cookie("x-device-index", index.ToString()));
+        this._socket.SetCookie(new Cookie("x-model-type", options.ModelType.ToString()));
+        this._socket.SetCookie(new Cookie("x-model-size", options.ModelSize));
 
-        await this._socket.ConnectAsync(this._serviceUri, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(options.Language))
+        {
+            this._socket.SetCookie(new Cookie("x-language", options.Language));
+        }
+
+        this._socket.SetCookie(new Cookie("x-is-multilang", options.IsMultiLanguage.ToString()));
+
+        this._socket.Connect();
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken = default)
+    public async Task StartRecordAsync(
+        Uri uri,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default)
     {
-        if (this._socket is not null && this._socket.State is not WebSocketState.Closed)
+        await this.StopAsync(cancellationToken);
+
+        this._socket = new WebSocket(this._serviceUri.AbsoluteUri);
+        this._socket.SetCookie(new Cookie("x-hls-url", uri.ToString()));
+        this._socket.SetCookie(new Cookie("x-model-type", options.ModelType.ToString()));
+        this._socket.SetCookie(new Cookie("x-model-size", options.ModelSize));
+
+        if (!string.IsNullOrWhiteSpace(options.Language))
         {
-            await this._socket.CloseAsync(WebSocketCloseStatus.Empty, string.Empty, cancellationToken);
+            this._socket.SetCookie(new Cookie("x-language", options.Language));
         }
+
+        this._socket.SetCookie(new Cookie("x-is-multilang", options.IsMultiLanguage.ToString()));
+
+        this._socket.Connect();
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        if (this._socket is not null && this._socket.IsAlive)
+        {
+            this._socket.Close();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public async Task TranscriptAsync(
+        string filePath,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException(filePath);
+        }
+
+        await this.StopAsync(cancellationToken);
+
+        this._socket = new WebSocket(this._serviceUri.AbsoluteUri);
+        this._socket.SetCookie(new Cookie("x-file-path", filePath));
+        this._socket.SetCookie(new Cookie("x-model-type", options.ModelType.ToString()));
+        this._socket.SetCookie(new Cookie("x-model-size", options.ModelSize));
+
+        if (!string.IsNullOrWhiteSpace(options.Language))
+        {
+            this._socket.SetCookie(new Cookie("x-language", options.Language));
+        }
+
+        this._socket.SetCookie(new Cookie("x-is-multilang", options.IsMultiLanguage.ToString()));
+
+        this._socket.Connect();
     }
 
     public event TranscriptorReadyEventHandler? TranscriptorReady;
@@ -91,33 +156,29 @@ public class WhisperTranscriptor : ITranscriptor, IObservable<TranscriptMessage>
 
     public IDisposable Subscribe(IObserver<TranscriptMessage> observer)
     {
+        if (this._socket is null)
+        {
+            observer.OnCompleted();
+
+            return System.Reactive.Disposables.Disposable.Empty;
+        }
+
         var sharedMemoryPool = ArrayPool<byte>.Shared;
         var buffer = sharedMemoryPool.Rent(4096);
 
-        var firstMessageArrived = false;
-
-        try
+        this._socket.OnError += (_, args) =>
         {
-            while (this._socket?.State == WebSocketState.Open)
+            sharedMemoryPool.Return(buffer);
+            observer.OnError(args.Exception);
+        };
+        this._socket.OnMessage += (sender, args) =>
+        {
+            Array.Clear(buffer);
+
+            var json = args.Data;
+
+            if (json != string.Empty)
             {
-                Array.Clear(buffer);
-
-                this._socket.ReceiveAsync(buffer, CancellationToken.None).Wait();
-
-                var json = Encoding.UTF8.GetString(buffer).TrimEnd((char)0);
-
-                if (json == string.Empty)
-                {
-                    continue;
-                }
-
-                if (!firstMessageArrived)
-                {
-                    this.TranscriptorReady?.Invoke(this);
-
-                    firstMessageArrived = true;
-                }
-
                 var obj = JsonSerializer.Deserialize<TranscriptResult>(json, _serializerOptions)!;
 
                 foreach (var message in obj.Messages)
@@ -125,13 +186,13 @@ public class WhisperTranscriptor : ITranscriptor, IObservable<TranscriptMessage>
                     observer.OnNext(message);
                 }
             }
-        }
-        finally
+        };
+        this._socket.OnClose += (sender, args) =>
         {
             sharedMemoryPool.Return(buffer);
-        }
 
-        observer.OnCompleted();
+            observer.OnCompleted();
+        };
 
         return System.Reactive.Disposables.Disposable.Empty;
     }

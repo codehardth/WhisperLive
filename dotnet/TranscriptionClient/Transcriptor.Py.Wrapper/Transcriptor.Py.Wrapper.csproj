@@ -10,6 +10,7 @@
     <ItemGroup>
         <PackageReference Include="System.Reactive" Version="6.0.0" />
         <PackageReference Include="PortAudioSharp" Version="0.3.0"/>
+        <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
     </ItemGroup>
 
 </Project>
