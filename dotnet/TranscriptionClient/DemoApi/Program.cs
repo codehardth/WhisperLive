@@ -1,7 +1,9 @@
 using DemoApi.Handlers;
+using Hangfire;
+using Hangfire.MemoryStorage;
 using MediatR;
-using Microsoft.AspNetCore.Mvc;
 using Transcriptor.Py.Wrapper.Abstraction;
+using Transcriptor.Py.Wrapper.Enums;
 using Transcriptor.Py.Wrapper.Implementation;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,7 +16,16 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddMediatR(config =>
     config.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
-builder.Services.AddSingleton<ITranscriptor>(
+builder.Services.AddHangfire(config => config.UseMemoryStorage());
+builder.Services.AddHangfireServer();
+
+builder.Services.AddSingleton(
+    new WhisperTranscriptorOptions(
+        ModelType.WhisperX,
+        "large-v2",
+        null,
+        true));
+builder.Services.AddTransient<ITranscriptor>(
     static _ => new WhisperTranscriptor(new Uri("ws://localhost:8765")));
 
 var app = builder.Build();
@@ -42,6 +53,17 @@ app.MapPost("/api/transcribe/{index:int}",
         var sessionId = await mediator.Send(new MessageTranscribeStartRequest(index), cancellationToken);
 
         return Results.Ok(sessionId);
+    });
+
+app.MapPost("/api/sessions/{sessionId:guid}",
+    async (
+        Guid sessionId,
+        IMediator mediator,
+        CancellationToken cancellationToken = default) =>
+    {
+        await mediator.Send(new MessageTranscribeStopRequest(sessionId), cancellationToken);
+
+        return Results.NoContent();
     });
 
 app.Run();

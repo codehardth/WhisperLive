@@ -22,12 +22,12 @@ RUN apt install software-properties-common -y && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt update
 
-RUN apt install python3-dev -y && \
-    apt install python-is-python3
+RUN apt install python3.11 python3.11-dev -y
     
 
 # install pip
-RUN apt install python3-pip -y
+RUN wget https://bootstrap.pypa.io/get-pip.py
+RUN python3.11 get-pip.py
 
 # Create a working directory.
 RUN mkdir /app
@@ -45,4 +45,4 @@ COPY whisper_live /app/whisper_live
 
 COPY run_server.py /app
 
-CMD ["python", "run_server.py"]
+CMD ["python3.11", "run_server.py"]

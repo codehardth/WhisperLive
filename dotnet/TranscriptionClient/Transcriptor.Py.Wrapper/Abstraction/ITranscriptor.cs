@@ -1,3 +1,4 @@
+using Transcriptor.Py.Wrapper.Implementation;
 using Transcriptor.Py.Wrapper.Models;
 
 namespace Transcriptor.Py.Wrapper.Abstraction;
@@ -8,9 +9,22 @@ public interface ITranscriptor : IObservable<TranscriptMessage>, IDisposable
 {
     IAsyncEnumerable<InputInterface> GetInputInterfacesAsync(CancellationToken cancellationToken = default);
 
-    Task StartAsync(int index, CancellationToken cancellationToken = default);
+    Task StartRecordAsync(
+        int index,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default);
+
+    Task StartRecordAsync(
+        Uri uri,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default);
 
     Task StopAsync(CancellationToken cancellationToken = default);
+
+    Task TranscriptAsync(
+        string filePath,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default);
 
     event TranscriptorReadyEventHandler TranscriptorReady;
 }

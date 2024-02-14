@@ -27,7 +27,13 @@ async def echo(websocket: WebSocketServerProtocol):
     cookieText = headers.get("Cookie")
     cookies = dict(item.split('=') for item in cookieText.split('; '))
 
-    device_index = int(cookies.get('x-device-index'))
+    device_index_str = cookies.get('x-device-index')
+    device_index = int(device_index_str) if device_index_str is not None else None
+
+    hls_uri = cookies.get('x-hls-url')
+
+    file_path = cookies.get('x-file-path')
+
     model_type = ModelType.parse(cookies.get('x-model-type'))
     model_size = cookies.get('x-model-size')
     lang = cookies.get('x-language')
@@ -43,11 +49,11 @@ async def echo(websocket: WebSocketServerProtocol):
         model_type=model_type,
         model_size=model_size,
         callback=handler,
-        replay_playback=False,
+        replay_playback=True,
         playback_device_index=device_index,
     )
 
-    client.start()
+    client.start(audio=file_path, hls_url=hls_uri)
 
     while websocket.state is State.OPEN:
         await asyncio.sleep(1)

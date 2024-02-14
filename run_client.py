@@ -3,14 +3,15 @@ from whisper_live.client import TranscriptionClient
 from whisper_live.enums.model_type import ModelType
 
 async def handler(data):
-    print(data)
+    for d in data:
+        print(d['text'])
 
     await asyncio.sleep(1)
 
 fun = handler
 
 client = TranscriptionClient(
-    "0.0.0.0",
+    "192.168.0.98",
     9090,
     is_multilingual=True,
     lang="th",
