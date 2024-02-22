@@ -293,6 +293,13 @@ class Client:
         """
         raw_data = np.frombuffer(buffer=audio_bytes, dtype=np.int16)
         return raw_data.astype(np.float32) / 32768.0
+    
+    @staticmethod
+    def split_stereo_channels(audio_array : np.ndarray) -> tuple[bytes, bytes]:
+        stereo_audio = np.frombuffer(audio_array, dtype=np.int16).reshape((-1, 2))
+        left = stereo_audio[:, 0].tobytes()
+        right = stereo_audio[:, 1].tobytes()
+        return (left, right)
 
     def send_packet_to_server(self, message):
         """
@@ -427,10 +434,11 @@ class Client:
 
             # Process the stream
             while True:
-                in_bytes = process.stdout.read(self.chunk * 2)  # 2 bytes per sample
+                in_bytes = process.stdout.read(self.chunk * 2)  # 4 bytes per stereo sample (2 channels * 2 bytes)
                 if not in_bytes:
                     break
                 audio_array = self.bytes_to_float_array(in_bytes)
+                # left, right = self.split_stereo_channels(audio_array)
                 self.send_packet_to_server(audio_array.tobytes())
 
         except Exception as e:

@@ -29,7 +29,6 @@ try:
 except Exception as e:
     logging.warn("cannot import WhisperTRTLLM")
 
-
 class TranscriptionServer:
     """
     Represents a transcription server that handles incoming audio from clients.
@@ -50,7 +49,7 @@ class TranscriptionServer:
     def __init__(self):
         # voice activity detection model
         
-        self.clients = {}
+        self.clients : dict[any, ServeClientBase] = {}
         self.websockets = {}
         self.clients_start_time = {}
         self.max_clients = 4
@@ -72,6 +71,18 @@ class TranscriptionServer:
                 wait_time = current_client_time_remaining
 
         return wait_time / 60
+    
+    @staticmethod
+    def split_stereo_channels(audio_array : np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        stereo_audio = audio_array.reshape((-1, 2))
+        left = stereo_audio[:, 0]
+        right = stereo_audio[:, 1]
+        return (left, right)
+    
+    @staticmethod
+    def bytes_to_float_array(audio_bytes):
+        raw_data = np.frombuffer(buffer=audio_bytes, dtype=np.int16)
+        return raw_data.astype(np.float32) / 32768.0
 
     def recv_audio(self,
                    websocket,
@@ -180,6 +191,8 @@ class TranscriptionServer:
                 frame_data = websocket.recv()
                 frame_np = np.frombuffer(frame_data, dtype=np.float32)
 
+                left, right = self.split_stereo_channels(frame_np)
+
                 # VAD, for faster_whisper VAD model is already integrated
                 if self.backend == "tensorrt":
                     try:
@@ -198,13 +211,16 @@ class TranscriptionServer:
                         logging.error(e)
                         return
                 
-                self.clients[websocket].add_frames(frame_np)
+                # self.clients[websocket].add_frames(frame_np)
+                current_client = self.clients[websocket]
+                current_client.add_frames(left)
+                current_client.add_frames(right)
 
                 elapsed_time = time.time() - self.clients_start_time[websocket]
                 if elapsed_time >= self.max_connection_time:
-                    self.clients[websocket].disconnect()
-                    logging.warning(f"Client with uid '{self.clients[websocket].client_uid}' disconnected due to overtime.")
-                    self.clients[websocket].cleanup()
+                    current_client.disconnect()
+                    logging.warning(f"Client with uid '{current_client.client_uid}' disconnected due to overtime.")
+                    current_client.cleanup()
                     self.clients.pop(websocket)
                     self.clients_start_time.pop(websocket)
                     websocket.close()
@@ -212,9 +228,9 @@ class TranscriptionServer:
                     break
 
             except Exception as e:
-                logging.info(f"[ERROR]: Client with uid '{self.clients[websocket].client_uid}' Disconnected.")
-                if self.clients[websocket].model_size_or_path is not None:
-                    self.clients[websocket].cleanup()
+                logging.info(f"[ERROR]: Client with uid '{current_client.client_uid}' Disconnected.")
+                if current_client.model_size_or_path is not None:
+                    current_client.cleanup()
                 self.clients.pop(websocket)
                 self.clients_start_time.pop(websocket)
                 del websocket
