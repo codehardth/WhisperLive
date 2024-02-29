@@ -1,3 +1,5 @@
+import binascii
+import gc
 import os
 import websockets
 import time
@@ -50,7 +52,8 @@ class TranscriptionServer:
     def __init__(self):
         # voice activity detection model
         
-        self.clients = {}
+        self.clients : dict[any, ServeClientBase] = {}
+        self.alt_clients : dict[any, ServeClientBase] = {}
         self.websockets = {}
         self.clients_start_time = {}
         self.max_clients = 4
@@ -114,6 +117,8 @@ class TranscriptionServer:
 
         logging.info(f"with options {options}")
 
+        channel = options["channel"]
+
         if len(self.clients) >= self.max_clients:
             logging.warning("Client Queue Full. Asking client to wait ...")
             wait_time = self.get_wait_time()
@@ -165,20 +170,59 @@ class TranscriptionServer:
                 task=options["task"],
                 client_uid=options["uid"],
                 model_type=ModelType(options["type"]),
-            model=options["model"],
+                model=options["model"],
                 initial_prompt=options.get("initial_prompt"),
-                vad_parameters=options.get("vad_parameters")
+                vad_parameters=options.get("vad_parameters"),
+                speaker_label="Speaker 1"
             )
+
+            channel_is_int = isinstance(channel, int)
+            more_than_one_ch = channel_is_int and channel > 1
+            alt_client = None if not(more_than_one_ch) else ServeClientFasterWhisper(
+            # alt_client = ServeClientFasterWhisper(
+                    websocket,
+                    multilingual=options["multilingual"],
+                    language=options["language"],
+                    task=options["task"],
+                    client_uid=options["uid"],
+                    model_type=ModelType(options["type"]),
+                    model=options["model"],
+                    initial_prompt=options.get("initial_prompt"),
+                    vad_parameters=options.get("vad_parameters"),
+                    speaker_label="Speaker 2"
+                )
             logging.info(f"Running faster_whisper backend.")
         
         self.clients[websocket] = client
+        self.alt_clients[websocket] = alt_client
         self.clients_start_time[websocket] = time.time()
         no_voice_activity_chunks = 0
 
         while True:
             try:
-                frame_data = websocket.recv()
-                frame_np = np.frombuffer(frame_data, dtype=np.float32)
+                packet = websocket.recv()
+                frame_np = None
+
+                alternate_client = self.alt_clients[websocket]
+
+                if more_than_one_ch and isinstance(packet, str):
+                    payload = json.loads(packet)
+                    channel = payload['channel']
+                    data = payload['data']
+                    frame_data = binascii.unhexlify(data)
+                    frame_np = np.frombuffer(frame_data, dtype=np.float32)
+
+                    if channel == "L":
+                        self.clients[websocket].add_frames(frame_np)
+                    elif channel == "R":
+                        if alternate_client is not None:
+                            alt_client.add_frames(frame_np)
+
+                elif isinstance(packet, bytes):
+                    frame_np = np.frombuffer(packet, dtype=np.float32)
+                    self.clients[websocket].add_frames(frame_np)
+                else:
+                    raise Exception("Unsupported payload format")
 
                 # VAD, for faster_whisper VAD model is already integrated
                 if self.backend == "tensorrt":
@@ -197,15 +241,17 @@ class TranscriptionServer:
                     except Exception as e:
                         logging.error(e)
                         return
-                
-                self.clients[websocket].add_frames(frame_np)
 
                 elapsed_time = time.time() - self.clients_start_time[websocket]
                 if elapsed_time >= self.max_connection_time:
                     self.clients[websocket].disconnect()
                     logging.warning(f"Client with uid '{self.clients[websocket].client_uid}' disconnected due to overtime.")
                     self.clients[websocket].cleanup()
+                    if alt_client is not None:
+                        alternate_client.cleanup()
+
                     self.clients.pop(websocket)
+                    self.alt_clients.pop(websocket)
                     self.clients_start_time.pop(websocket)
                     websocket.close()
                     del websocket
@@ -215,10 +261,37 @@ class TranscriptionServer:
                 logging.info(f"[ERROR]: Client with uid '{self.clients[websocket].client_uid}' Disconnected.")
                 if self.clients[websocket].model_size_or_path is not None:
                     self.clients[websocket].cleanup()
+                    if alt_client is not None:
+                        alternate_client.cleanup()
+
                 self.clients.pop(websocket)
+                self.alt_clients.pop(websocket)
+
                 self.clients_start_time.pop(websocket)
                 del websocket
                 break
+
+    def decode(self, frame_data, channels):
+        """
+        Convert a byte stream into a 2D numpy array with 
+        shape (chunk_size, channels)
+
+        Samples are interleaved, so for a stereo stream with left channel 
+        of [L0, L1, L2, ...] and right channel of [R0, R1, R2, ...], the output 
+        is ordered as [L0, R0, L1, R1, ...]
+        """
+        # TODO: handle data type as parameter, convert between pyaudio/numpy types
+        result = np.frombuffer(frame_data, dtype=np.float32)
+
+        chunk_length = len(result) / channels
+        assert chunk_length == int(chunk_length)
+
+        result = np.reshape(result, (int(chunk_length), channels))
+
+        left = result[:, 0]
+        right = result[:, 1]
+
+        return (left, right)
 
     def run(self, 
             host, 
@@ -572,6 +645,7 @@ class ServeClientFasterWhisper(ServeClientBase):
         model="small",
         initial_prompt=None,
         vad_parameters=None,
+        speaker_label="undefined"
         ):
         """
         Initialize a ServeClient instance.
@@ -593,6 +667,8 @@ class ServeClientFasterWhisper(ServeClientBase):
             "tiny", "tiny.en", "base", "base.en", "small", "small.en",
             "medium", "medium.en", "large-v2", "large-v3",
         ]
+
+        self.speaker_label = speaker_label
 
         self.multilingual = multilingual
         if not os.path.exists(model):
@@ -616,7 +692,7 @@ class ServeClientFasterWhisper(ServeClientBase):
             model=self.model_size_or_path,
             compute_type=compute_type,
             align_model="wannaphong/wav2vec2-large-xlsr-53-th-cv8-deepcut",
-            language="th",
+            language=self.language,
             device=device)
         
         self.timestamp_offset = 0.0
@@ -699,6 +775,8 @@ class ServeClientFasterWhisper(ServeClientBase):
             
             if self.frames_np is None: 
                 continue
+            
+            # logging.info(f"Processing ASR for {self.speaker_label}")
 
             # clip audio if the current chunk exceeds 30 seconds, this basically implies that
             # no valid segment for the last 30 seconds from whisper
@@ -714,10 +792,12 @@ class ServeClientFasterWhisper(ServeClientBase):
             try:
                 input_sample = input_bytes.copy()
                 
+                logging.info(f"Transcribing for {self.speaker_label}")
                 result, info = self.transcriber.transcribe(
                     audio=input_sample,
                     batch_size=4
                 )
+                logging.info(f"Transcribe completed for {self.speaker_label}")
 
                 if self.language is None:
                     if info.language_probability > 0.5:
@@ -756,6 +836,7 @@ class ServeClientFasterWhisper(ServeClientBase):
                 try:
                     self.websocket.send(
                         json.dumps({
+                            "label": self.speaker_label,
                             "uid": self.client_uid,
                             "segments": segments
                         })
@@ -871,34 +952,43 @@ class ServeClientFasterWhisper(ServeClientBase):
 
         """
         logging.info("Cleaning up.")
+        del self.transcriber
+        gc.collect()
+        torch.cuda.empty_cache()
+        logging.info("Resource cleaned up.")
         self.exit = True
 
 def CreateTranscriber(type: str, model: ModelType, **kwargs) -> TranscriberBase:
+    logging.info("creating")
+
     compute_type = kwargs.get("compute_type", "int8")
     device = kwargs.get("device", "cpu")
     language = kwargs.get("language", None)
 
-    if type == ModelType.WhisperX:
-        align_model = kwargs.get("align_model")
-        return WhisperXModel(
-            compute_type=compute_type,
-            align_model=align_model,
-            language=language,
-            model=model,
-            device=device
-        )
-    elif type == ModelType.Thonburian:
-        return ThonburianTranscriber(
-            language=language,
-            device=device,
-        )
-    elif type == ModelType.Default:
-        return WhisperModel(
-            model_size_or_path=model,
-            device=device,
-            compute_type=compute_type,
-            local_files_only=False,
-            language=language
-        )
-    else:
-        raise TypeError
+    try:
+        if type == ModelType.WhisperX:
+            align_model = kwargs.get("align_model")
+            return WhisperXModel(
+                compute_type=compute_type,
+                align_model=align_model,
+                language=language,
+                model=model,
+                device=device
+            )
+        elif type == ModelType.Thonburian:
+            return ThonburianTranscriber(
+                language=language,
+                device=device,
+            )
+        elif type == ModelType.Default:
+            return WhisperModel(
+                model_size_or_path=model,
+                device=device,
+                compute_type=compute_type,
+                local_files_only=False,
+                language=language
+            )
+        else:
+            raise TypeError
+    finally:
+        logging.info("created")

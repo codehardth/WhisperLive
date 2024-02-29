@@ -1,4 +1,6 @@
+import gc
 from logging import getLogger
+import torch
 from transformers import pipeline
 from whisper_live.abstraction.transcriber_base import Segment, TranscriberBase, TranscriptionInfo
 
@@ -34,30 +36,34 @@ class ThonburianTranscriber(TranscriberBase):
         audio,
         **kwargs
     ):
-        res = self.__pipe(
-            audio,
-            generate_kwargs={"language": "<|th|>", "task": "transcribe"},
-            return_timestamps=True,
-            batch_size=16)
-        text = res["text"]
-        segments = res["chunks"]
+        try:
+            res = self.__pipe(
+                audio,
+                generate_kwargs={"language": "<|th|>", "task": "transcribe"},
+                return_timestamps=True,
+                batch_size=16)
+            text = res["text"]
+            segments = res["chunks"]
 
-        results = [
-            Segment(
-                id=index,
-                seek=-1,
-                start=0,
-                end=0,
-                text=a['text'],
-                tokens=[],
-                temperature=-1,
-                avg_logprob=-1,
-                compression_ratio=-1,
-                no_speech_prob=-1,
-                words=[]
-            )
-            for index, a 
-            in enumerate(segments)
-        ]
+            results = [
+                Segment(
+                    id=index,
+                    seek=-1,
+                    start=0,
+                    end=0,
+                    text=a['text'],
+                    tokens=[],
+                    temperature=-1,
+                    avg_logprob=-1,
+                    compression_ratio=-1,
+                    no_speech_prob=-1,
+                    words=[]
+                )
+                for index, a 
+                in enumerate(segments)
+            ]
 
-        return results, self.__info__
+            return results, self.__info__
+        finally:
+            gc.collect()
+            torch.cuda.empty_cache()

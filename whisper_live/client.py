@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import binascii
 import ctypes
 import datetime
 import inspect
@@ -128,7 +130,10 @@ class Client:
 
         default_input = None if playback_device_index is None else self.p.get_device_info_by_index(playback_device_index)
         playback_index = None if default_input is None else default_input.get('index')
-        channels = 1 #None if default_input is None else default_input.get('maxOutputChannels')
+        channels = 1 if default_input is None else default_input.get('maxOutputChannels')
+
+        self.channels = channels
+
         self.stream = self.p.open(
             format=self.format,
             channels=channels,
@@ -214,6 +219,11 @@ class Client:
 
         if "segments" not in keys:
             return
+        
+        label = "undefined"
+
+        if "label" in keys:
+            label = message.get("label")
 
         messages = message["segments"]
         text = []
@@ -235,9 +245,9 @@ class Client:
 
         if latest_word_list_hash != current_word_list_hash:
             if inspect.iscoroutinefunction(self.callback):
-                asyncio.run(self.callback(messages))
+                asyncio.run(self.callback(label, messages))
             else:
-                self.callback(messages)
+                self.callback(label, messages)
 
         self.__messages__.append(word_tuple)
 
@@ -272,10 +282,33 @@ class Client:
                     "task": self.task,
                     "type": self.model_type,
                     "model": self.model_size,
-                    "use_custom_model": self.use_custom_model   # if runnning your own server with a custom model
+                    "use_custom_model": self.use_custom_model,   # if runnning your own server with a custom model
+                    "channel": self.channels,
                 }
             )
         )
+
+    @staticmethod
+    def decode(frame_data, channels):
+        """
+        Convert a byte stream into a 2D numpy array with 
+        shape (chunk_size, channels)
+
+        Samples are interleaved, so for a stereo stream with left channel 
+        of [L0, L1, L2, ...] and right channel of [R0, R1, R2, ...], the output 
+        is ordered as [L0, R0, L1, R1, ...]
+        """
+        # TODO: handle data type as parameter, convert between pyaudio/numpy types
+        result = np.frombuffer(frame_data, dtype=np.float32) if isinstance(frame_data, bytes) else frame_data
+
+        chunk_length = len(result) / channels
+
+        if chunk_length != int(chunk_length):
+            return None
+
+        result = np.reshape(result, (int(chunk_length), channels))
+
+        return result
 
     @staticmethod
     def bytes_to_float_array(audio_bytes):
@@ -293,6 +326,12 @@ class Client:
         """
         raw_data = np.frombuffer(buffer=audio_bytes, dtype=np.int16)
         return raw_data.astype(np.float32) / 32768.0
+    
+    def send_json_to_server(self, message):
+        try:
+            self.client_socket.send(message, websocket.ABNF.OPCODE_TEXT)
+        except Exception as e:
+            print(e)
 
     def send_packet_to_server(self, message):
         """
@@ -339,7 +378,34 @@ class Client:
                         break
 
                     audio_array = self.bytes_to_float_array(data)
-                    self.send_packet_to_server(audio_array.tobytes())
+                    decode_result = self.decode(audio_array.tobytes(), 2)
+
+                    if decode_result is None:
+                        break
+
+                    left = decode_result[:, 0]
+                    right = decode_result[:, 1]
+
+                    left_bytes = left.tobytes()
+                    right_bytes = right.tobytes()
+
+                    left_hex = binascii.hexlify(left_bytes).decode('ascii')
+                    right_hex = binascii.hexlify(right_bytes).decode('ascii')
+
+                    self.send_json_to_server(
+                        json.dumps(
+                            {
+                                "channel": "L",
+                                "data": left_hex
+                            }
+                        ))
+                    self.send_json_to_server(
+                        json.dumps(
+                            {
+                                "channel": "R",
+                                "data": right_hex
+                            }
+                        ))
                     
                     if self.replay_playback:
                         self.stream.write(data)
@@ -417,21 +483,51 @@ class Client:
         process = None  # Initialize process to None
 
         try:
+            channel_count = 2
+            sample_count = channel_count * 2
+
             # Connecting to the HLS stream using ffmpeg-python
             process = (
                 ffmpeg
                 .input(hls_url, threads=0)
-                .output('-', format='s16le', acodec='pcm_s16le', ac=1, ar=self.rate)
+                .output('-', format='s16le', acodec='pcm_s16le', ac=channel_count, ar=self.rate)
                 .run_async(pipe_stdout=True, pipe_stderr=True)
             )
 
             # Process the stream
             while True:
-                in_bytes = process.stdout.read(self.chunk * 2)  # 2 bytes per sample
+                in_bytes = process.stdout.read(self.chunk * sample_count)  # 2 bytes per sample
                 if not in_bytes:
                     break
                 audio_array = self.bytes_to_float_array(in_bytes)
-                self.send_packet_to_server(audio_array.tobytes())
+                decode_result = self.decode(audio_array.tobytes(), 2)
+
+                if decode_result is None:
+                    break
+
+                left = decode_result[:, 0]
+                right = decode_result[:, 1]
+
+                left_bytes = left.tobytes()
+                right_bytes = right.tobytes()
+
+                left_hex = binascii.hexlify(left_bytes).decode('ascii')
+                right_hex = binascii.hexlify(right_bytes).decode('ascii')
+
+                self.send_json_to_server(
+                    json.dumps(
+                        {
+                            "channel": "L",
+                            "data": left_hex
+                        }
+                    ))
+                self.send_json_to_server(
+                    json.dumps(
+                        {
+                            "channel": "R",
+                            "data": right_hex
+                        }
+                    ))
 
         except Exception as e:
             print(f"[ERROR]: Failed to connect to HLS stream: {e}")
@@ -471,7 +567,37 @@ class Client:
 
                 audio_array = Client.bytes_to_float_array(data)
 
-                self.send_packet_to_server(audio_array.tobytes())
+                if self.channels == 1:
+                    self.send_packet_to_server(audio_array.tobytes())
+                else:
+                    decode_result = self.decode(audio_array.tobytes(), 2)
+
+                    if decode_result is None:
+                        break
+
+                    left = decode_result[:, 0]
+                    right = decode_result[:, 1]
+
+                    left_bytes = left.tobytes()
+                    right_bytes = right.tobytes()
+
+                    left_hex = binascii.hexlify(left_bytes).decode('ascii')
+                    right_hex = binascii.hexlify(right_bytes).decode('ascii')
+
+                    self.send_json_to_server(
+                        json.dumps(
+                            {
+                                "channel": "L",
+                                "data": left_hex
+                            }
+                        ))
+                    self.send_json_to_server(
+                        json.dumps(
+                            {
+                                "channel": "R",
+                                "data": right_hex
+                            }
+                        ))
 
                 # save frames if more than a minute
                 if len(self.frames) > 60 * self.rate:
