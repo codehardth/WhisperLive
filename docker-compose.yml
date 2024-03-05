@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: ./docker/Dockerfile.cpu
     ports:
-      - "9090:9090"
+      - "9091:9090"
 
   transcribe-ws:
     build: 
