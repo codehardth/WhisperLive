@@ -729,17 +729,17 @@ class ServeClientFasterWhisper(ServeClientBase):
         """
         Returns the whisper model size based on multilingual.
         """
-        if model_size not in self.model_sizes:
-            self.websocket.send(
-                json.dumps(
-                    {
-                        "uid": self.client_uid,
-                        "status": "ERROR",
-                        "message": f"Invalid model size {model_size}. Available choices: {self.model_sizes}"
-                    }
-                )
-            )
-            return None
+        # if model_size not in self.model_sizes:
+        #     self.websocket.send(
+        #         json.dumps(
+        #             {
+        #                 "uid": self.client_uid,
+        #                 "status": "ERROR",
+        #                 "message": f"Invalid model size {model_size}. Available choices: {self.model_sizes}"
+        #             }
+        #         )
+        #     )
+        #     return None
         
         if model_size.endswith("en") and self.multilingual:
             logging.info(f"Setting multilingual to false with {model_size} which is english only model.")

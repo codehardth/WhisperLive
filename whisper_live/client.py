@@ -130,7 +130,7 @@ class Client:
 
         default_input = None if playback_device_index is None else self.p.get_device_info_by_index(playback_device_index)
         playback_index = None if default_input is None else default_input.get('index')
-        channels = 1 if default_input is None else default_input.get('maxOutputChannels')
+        channels = 2 if default_input is None else default_input.get('maxOutputChannels')
 
         self.channels = channels
 
