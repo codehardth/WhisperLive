@@ -770,18 +770,21 @@ class ServeClientFasterWhisper(ServeClientBase):
         Returns:
             str: The model size if valid, None otherwise.
         """
-        if model_size not in self.model_sizes:
-            self.websocket.send(
-                json.dumps(
-                    {
-                        "uid": self.client_uid,
-                        "status": "ERROR",
-                        "message": f"Invalid model size {model_size}. Available choices: {self.model_sizes}"
-                    }
-                )
-            )
-            return None
-        return model_size
+        # if model_size not in self.model_sizes:
+        #     self.websocket.send(
+        #         json.dumps(
+        #             {
+        #                 "uid": self.client_uid,
+        #                 "status": "ERROR",
+        #                 "message": f"Invalid model size {model_size}. Available choices: {self.model_sizes}"
+        #             }
+        #         )
+        #     )
+        #     return None
+        
+        if model_size in ["large-v2", "large-v3"]:
+            self.multilingual = True
+            return model_size
 
     def set_language(self, info):
         """
