@@ -2,17 +2,29 @@ import asyncio
 from whisper_live.client import TranscriptionClient
 from whisper_live.enums.model_type import ModelType
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 async def handler(speaker, data):
-    print("---" + speaker)
+    color = bcolors.OKBLUE if speaker == "Speaker 1" else bcolors.OKGREEN
+    print(f"{color}--- {speaker}{bcolors.ENDC}")
     for d in data:
-        print(d['text'])
+        print(f"{color}{d['text']}{bcolors.ENDC}")
 
     await asyncio.sleep(1)
 
 fun = handler
 
 client = TranscriptionClient(
-    "0.0.0.0",
+    "192.168.1.98",
     9090,
     is_multilingual=False,
     lang="th",
