@@ -205,7 +205,7 @@ class TranscriptionServer:
 
                 alternate_client = self.alt_clients[websocket]
 
-                if more_than_one_ch and isinstance(packet, str):
+                if isinstance(packet, str):
                     payload = json.loads(packet)
                     channel = payload['channel']
                     data = payload['data']
