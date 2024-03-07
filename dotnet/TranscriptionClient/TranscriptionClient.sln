@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DemoApi", "DemoApi\DemoApi.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Codehard.SpeechToText.Api", "Codehard.SpeechToText.Api\Codehard.SpeechToText.Api.csproj", "{5ADF506D-CE47-4074-BA3E-DE55854A67DB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DemoWeb", "DemoWeb\DemoWeb.csproj", "{94D2D063-7DB4-40C4-803A-0464A129B5F6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{5ADF506D-CE47-4074-BA3E-DE55854A67DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5ADF506D-CE47-4074-BA3E-DE55854A67DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5ADF506D-CE47-4074-BA3E-DE55854A67DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{94D2D063-7DB4-40C4-803A-0464A129B5F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{94D2D063-7DB4-40C4-803A-0464A129B5F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{94D2D063-7DB4-40C4-803A-0464A129B5F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{94D2D063-7DB4-40C4-803A-0464A129B5F6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
