@@ -18,6 +18,7 @@ class Program
         await transcriptor.StartRecordAsync(url, options);
 
         transcriptor
+            .SelectMany(m => m.Messages)
             .Select(m => m.Text)
             .Subscribe(Console.WriteLine);
 
