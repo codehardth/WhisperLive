@@ -14,22 +14,20 @@
 <h3>CH Speech to Text</h3>
 
 <div id="chat-container">
-    <div id="chat-box">
-        @foreach (var transcriptMessage in transcriptMessagesForSpeaker1.ToArray())
-        {
-            <div class="other-bubble">
-                @transcriptMessage.Value.Message
-            </div>
-        }
-    </div>
-    <div id="chat-box">
-        @foreach (var transcriptMessage in transcriptMessagesForSpeaker2.ToArray())
-        {
-            <div class="other-bubble">
-                @transcriptMessage.Value.Message
-            </div>
-        }
-    </div>
+    @foreach (var v in transcriptMessagesDict.OrderBy(kvp => kvp.Key))
+    {
+        <div id="spk-@v.Key">
+            @v.Key
+        </div>
+        <div id="chat-box">
+            @foreach (var transcriptMessage in v.Value.ToArray())
+            {
+                <div class="other-bubble">
+                    @transcriptMessage.Value.Message
+                </div>
+            }
+        </div>
+    }
     <div id="ai-input">
         <button id="record-button" @onclick="async () => await StartAudioTranscriptionAsync()">@RecordButtonText</button>
         <button id="clear-button" @onclick="Clear">Clear</button>
@@ -55,8 +53,10 @@
         public string? Message { get; set; }
     }
 
-    private readonly SortedList<double, TranscriptMessage> transcriptMessagesForSpeaker1 = [];
-    private readonly SortedList<double, TranscriptMessage> transcriptMessagesForSpeaker2 = [];
+    private readonly Dictionary<string, SortedList<double, TranscriptMessage>> transcriptMessagesDict = new();
+
+    // private readonly SortedList<double, TranscriptMessage> transcriptMessagesForSpeaker1 = [];
+    // private readonly SortedList<double, TranscriptMessage> transcriptMessagesForSpeaker2 = [];
     private readonly List<TranscriptMessage> rawTranscriptMessages = [];
 
     private WhisperTranscriptor? transcriptor;
@@ -121,12 +121,16 @@
                             Message = msg.Text
                         };
 
-                        var targetList = result.Speaker switch
+                        SortedList<double, TranscriptMessage> targetList;
+
+                        if (transcriptMessagesDict.TryGetValue(result.Speaker, out targetList))
                         {
-                            "Speaker 1" => transcriptMessagesForSpeaker1,
-                            "Speaker 2" => transcriptMessagesForSpeaker2,
-                            _ => throw new NotSupportedException(),
-                        };
+                        }
+                        else
+                        {
+                            targetList = new SortedList<double, TranscriptMessage>();
+                            transcriptMessagesDict.Add(result.Speaker, targetList);
+                        }
 
                         if (!targetList.Any())
                         {
@@ -175,7 +179,10 @@
 
     private void Clear()
     {
-        transcriptMessagesForSpeaker1.Clear();
+        foreach (var v in transcriptMessagesDict)
+        {
+            v.Value.Clear();
+        }
     }
 
     public void Dispose()
