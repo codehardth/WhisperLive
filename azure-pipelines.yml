@@ -14,6 +14,9 @@ resources:
   - repo: self
 
 variables:
+  dockerRegistryServiceConnection: 'e2a8af2a-4c4f-4ef8-bbd1-82dadd2f3470'
+  dockerBuildContext: '$(Build.SourcesDirectory)/'
+  tag: '$(Build.BuildId)'
   buildConfiguration: 'Release'
 
 stages:
@@ -21,7 +24,7 @@ stages:
     displayName: Build and publish package
     jobs:
       - job: Build
-        displayName: Build
+        displayName: Build and publish dotnet projects
         steps:
           - bash: |
               tag=$(git tag --sort=-creatordate | head -n 1)
@@ -65,3 +68,40 @@ stages:
               packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'
               nuGetFeedType: 'external'
               publishFeedCredentials: 'Codehard Token For TranscriptorPyWrapper'
+      - job: Docker
+        displayName: Build and publish Docker images
+        steps:
+          - task: Docker@2
+            displayName: 'Build and push socket client to common registry'
+            inputs:
+              command: buildAndPush
+              repository: whisper-asr-socket-client
+              dockerfile: '$(Build.SourcesDirectory)/docker/Dockerfile.client'
+              buildContext: $(dockerBuildContext)
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                latest
+                $(tag)
+          - task: Docker@2
+            displayName: 'Build and push ASR server (cpu) image to common registry'
+            inputs:
+              command: buildAndPush
+              repository: whisper-asr-server
+              dockerfile: '$(Build.SourcesDirectory)/docker/Dockerfile.cpu'
+              buildContext: $(dockerBuildContext)
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                latest
+                cpu
+                $(tag)-cpu
+          - task: Docker@2
+            displayName: 'Build and push ASR server (gpu) image to common registry'
+            inputs:
+              command: buildAndPush
+              repository: whisper-asr-server
+              dockerfile: '$(Build.SourcesDirectory)/docker/Dockerfile.gpu'
+              buildContext: $(dockerBuildContext)
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                gpu
+                $(tag)-gpu
