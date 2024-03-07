@@ -154,7 +154,7 @@ public class WhisperTranscriptor : ITranscriptor
         GC.SuppressFinalize(this);
     }
 
-    public IDisposable Subscribe(IObserver<TranscriptMessage> observer)
+    public IDisposable Subscribe(IObserver<TranscriptResult> observer)
     {
         if (this._socket is null)
         {
@@ -179,12 +179,9 @@ public class WhisperTranscriptor : ITranscriptor
 
             if (json != string.Empty)
             {
-                var obj = JsonSerializer.Deserialize<TranscriptResult>(json, _serializerOptions)!;
+                var result = JsonSerializer.Deserialize<TranscriptResult>(json, _serializerOptions)!;
 
-                foreach (var message in obj.Messages)
-                {
-                    observer.OnNext(message);
-                }
+                observer.OnNext(result);
             }
         };
         this._socket.OnClose += (sender, args) =>
