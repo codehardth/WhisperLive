@@ -40,14 +40,17 @@ public class TranscriptionHub : Hub, IDiscoverableHub
         var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang);
         await this._transcriptor.TranscriptAsync(fileInfo.FullName, options, cancellationToken);
 
-        foreach (var message in this._transcriptor.Distinct())
+        foreach (var result in this._transcriptor.Distinct())
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
 
-            yield return message.Text;
+            foreach (var message in result.Messages)
+            {
+                yield return message.Text;
+            }
         }
 
         await this._transcriptor.StopAsync(CancellationToken.None);
@@ -65,14 +68,17 @@ public class TranscriptionHub : Hub, IDiscoverableHub
         var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang);
         await this._transcriptor.StartRecordAsync(deviceIndex, options, cancellationToken);
 
-        foreach (var message in this._transcriptor.Distinct())
+        foreach (var result in this._transcriptor.Distinct())
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
 
-            yield return message.Text;
+            foreach (var message in result.Messages)
+            {
+                yield return message.Text;
+            }
         }
 
         await this._transcriptor.StopAsync(CancellationToken.None);
@@ -90,14 +96,17 @@ public class TranscriptionHub : Hub, IDiscoverableHub
         var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang);
         await this._transcriptor.StartRecordAsync(uri, options, cancellationToken);
 
-        foreach (var message in this._transcriptor.Distinct())
+        foreach (var result in this._transcriptor.Distinct())
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
 
-            yield return message.Text;
+            foreach (var message in result.Messages)
+            {
+                yield return message.Text;
+            }
         }
 
         await this._transcriptor.StopAsync(CancellationToken.None);

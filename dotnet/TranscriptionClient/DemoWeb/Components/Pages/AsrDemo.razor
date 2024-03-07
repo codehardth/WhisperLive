@@ -14,14 +14,20 @@
 <h3>CH Speech to Text</h3>
 
 <div id="chat-container">
-    <div id="chat-box">
-        @foreach (var transcriptMessage in transcriptMessages.ToArray())
-        {
-            <div class="other-bubble">
-                @transcriptMessage.Message
-            </div>
-        }
-    </div>
+    @foreach (var v in transcriptMessagesDict.OrderBy(kvp => kvp.Key))
+    {
+        <div id="spk-@v.Key">
+            @v.Key
+        </div>
+        <div id="chat-box">
+            @foreach (var transcriptMessage in v.Value.ToArray())
+            {
+                <div class="other-bubble">
+                    @transcriptMessage.Value.Message
+                </div>
+            }
+        </div>
+    }
     <div id="ai-input">
         <button id="record-button" @onclick="async () => await StartAudioTranscriptionAsync()">@RecordButtonText</button>
         <button id="clear-button" @onclick="Clear">Clear</button>
@@ -37,23 +43,25 @@
 </div>
 
 @code {
+
     public class TranscriptMessage
     {
         public double Start { get; set; }
+        public double End { get; set; }
         public double Length { get; set; }
-        public string Speaker { get; set; } = "Speaker1";
+        public string? Speaker { get; set; }
         public string? Message { get; set; }
     }
-    
-    private readonly List<TranscriptMessage> transcriptMessages = [];
+
+    private readonly Dictionary<string, SortedList<double, TranscriptMessage>> transcriptMessagesDict = new();
     private readonly List<TranscriptMessage> rawTranscriptMessages = [];
-    
+
     private WhisperTranscriptor? transcriptor;
-    
+
     private Timer? updateTimer;
 
     private string RecordButtonText = "Record";
-    
+
     private async Task StartAudioTranscriptionAsync()
     {
         if (transcriptor != null)
@@ -64,88 +72,93 @@
             RecordButtonText = "Record";
             return;
         }
-        
-        var serviceUri = new Uri("ws://192.168.0.98:8765");
+
+        var serviceUri = new Uri("ws://192.168.20.98:8765");
         transcriptor = new WhisperTranscriptor(serviceUri);
 
         var devices = await transcriptor.GetInputInterfacesAsync().ToListAsync();
         //var pulseDevice = devices.Single(d => d.Name == "MacBook Pro Microphone");
         var options = new WhisperTranscriptorOptions(
-            ModelType.WhisperX, ModelSize: "large-v2", Language: "th", IsMultiLanguage: false);
-        var url =
-            new Uri(
-                "https://cdn-live.tpchannel.org/v1/0180e10a4a7809df73070d7d8760/0180e10adac40b8ed59433d5f3ce/main.m3u8");
-        
+            ModelType.Default, ModelSize: "CodeHardThailand/whisper-th-medium-combined-ct2", Language: "th", IsMultiLanguage: false);
+        var url = new Uri("https://tv-live.tpchannel.org/live/tv.m3u8");
+
         await transcriptor.StartRecordAsync(url, options);
-        
+
         double latestStartTime = 0;
         string latestDialog = "";
 
         transcriptor
-            .Where(m => m?.Text != null)
-            .Where(m => m!.Text != "โปรดติดตามตอนต่อไป")
+            .Where(m => m.Messages.Any())
             .Subscribe(
-                msg =>
+                result =>
                 {
-                    Debug.WriteLine(msg.Text);
+                    var messages = result.Messages.Where(m => m.Text != "โปรดติดตามตอนต่อไป");
+                    var distinctMessages =
+                        messages
+                            .GroupBy(m => (result.Speaker, m.Start))
+                            .Select(g => g.Last());
 
-                    rawTranscriptMessages.Add(
-                        new TranscriptMessage
-                        {
-                            Start = msg.Start,
-                            Length = msg.End - msg.Start,
-                            Speaker = $"{msg.Start}-{msg.End} Speaker1 : ",
-                            Message = msg.Text
-                        });
-                    
-                    if (!transcriptMessages.Any())
+                    foreach (var msg in distinctMessages)
                     {
-                        transcriptMessages.Add(
+                        rawTranscriptMessages.Add(
                             new TranscriptMessage
                             {
                                 Start = msg.Start,
                                 Length = msg.End - msg.Start,
-                                Speaker = $"{msg.Start}-{msg.End} Speaker1 : ",
+                                Speaker = $"{msg.Start}-{msg.End} {result.Speaker} : ",
                                 Message = msg.Text
                             });
-                    }
-                    else
-                    {
-                        if (msg.End - msg.Start >= transcriptMessages[^1].Length &&
-                            msg.Start - transcriptMessages[^1].Start <= 1f)
+
+                        var transcriptionMessage = new TranscriptMessage
                         {
-                            transcriptMessages[^1] =
-                                new TranscriptMessage
-                                {
-                                    Start = msg.Start,
-                                    Length = msg.End - msg.Start,
-                                    Speaker = $"{msg.Start}-{msg.End} Speaker1 ",
-                                    Message = msg.Text
-                                };
-                        }
-                        else if(msg.Start > transcriptMessages[^1].Start)
+                            Start = msg.Start,
+                            End = msg.End,
+                            Length = msg.End - msg.Start,
+                            Speaker = $"{msg.Start}-{msg.End} {result.Speaker} : ",
+                            Message = msg.Text
+                        };
+
+                        if (!transcriptMessagesDict.TryGetValue(result.Speaker, out var targetList))
                         {
-                            transcriptMessages.Add(
-                                new TranscriptMessage
-                                {
-                                    Start = msg.Start,
-                                    Length = msg.End - msg.Start,
-                                    Speaker = $"{msg.Start}-{msg.End} Speaker1 ",
-                                    Message = msg.Text
-                                });
+                            targetList = new SortedList<double, TranscriptMessage>();
+                            transcriptMessagesDict.Add(result.Speaker, targetList);
                         }
+
+                        if (!targetList.Any())
+                        {
+                            targetList.Add(msg.Start, transcriptionMessage);
+                        }
+                        else
+                        {
+                            var messageIndex = targetList.IndexOfKey(msg.Start);
+
+                            // Not found
+                            if (messageIndex < 0)
+                            {
+                                targetList.Add(msg.Start, transcriptionMessage);
+                            }
+                            else
+                            {
+                                var current = targetList[msg.Start];
+
+                                if (current.End < msg.End)
+                                {
+                                    targetList[msg.Start] = transcriptionMessage;
+                                }
+                            }
+                        }
+
+                        InvokeAsync(StateHasChanged);
+
+                        JSRuntime.InvokeVoidAsync("scrollToBottom", "chat-box");
+
+                        latestDialog = msg.Text;
                     }
-                    
-                    InvokeAsync(StateHasChanged);
-                    
-                    JSRuntime.InvokeVoidAsync("scrollToBottom", "chat-box");
-                    
-                    latestDialog = msg.Text;
                 });
-        
+
         RecordButtonText = "Stop";
     }
-    
+
     private string SkipDuplicateCharacters(string text, string latestDialog)
     {
         return
@@ -158,13 +171,17 @@
 
     private void Clear()
     {
-        transcriptMessages.Clear();
+        foreach (var v in transcriptMessagesDict)
+        {
+            v.Value.Clear();
+        }
     }
-    
+
     public void Dispose()
     {
         transcriptor?.StopAsync();
         transcriptor?.Dispose();
         updateTimer?.Dispose();
     }
+
 }

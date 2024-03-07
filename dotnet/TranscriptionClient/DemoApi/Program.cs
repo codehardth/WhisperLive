@@ -21,12 +21,12 @@ builder.Services.AddHangfireServer();
 
 builder.Services.AddSingleton(
     new WhisperTranscriptorOptions(
-        ModelType.WhisperX,
+        ModelType.Default,
         "large-v2",
         null,
         true));
 builder.Services.AddTransient<ITranscriptor>(
-    static _ => new WhisperTranscriptor(new Uri("ws://localhost:8765")));
+    static _ => new WhisperTranscriptor(new Uri("ws://192.168.20.98:8765")));
 
 var app = builder.Build();
 

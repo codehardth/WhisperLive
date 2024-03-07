@@ -5,7 +5,7 @@ namespace Transcriptor.Py.Wrapper.Abstraction;
 
 public delegate void TranscriptorReadyEventHandler(ITranscriptor sender);
 
-public interface ITranscriptor : IObservable<TranscriptMessage>, IDisposable
+public interface ITranscriptor : IObservable<TranscriptResult>, IDisposable
 {
     IAsyncEnumerable<InputInterface> GetInputInterfacesAsync(CancellationToken cancellationToken = default);
 

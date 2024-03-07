@@ -52,6 +52,7 @@ public class MessageTranscribeHandler : IRequestHandler<MessageTranscribeStartRe
             Action<string> log = m => this._logger.LogInformation($"[{sessionId}] {m}");
 
             this._transcriptor
+                .SelectMany(m => m.Messages)
                 .Select(m => m.Text)
                 .Subscribe(log, cancellationToken);
 
