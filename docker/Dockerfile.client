@@ -43,6 +43,7 @@ COPY requirements/ /app
 # RUN bash setup.sh
 RUN python3.11 -m pip install -r client.txt
 
+COPY formatters /app/formatters
 COPY whisper_live /app/whisper_live
 COPY client_socket.py /app
 
