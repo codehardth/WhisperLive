@@ -63,6 +63,7 @@ public class WhisperTranscriptor : ITranscriptor
         this._socket.SetCookie(new Cookie("x-device-index", index.ToString()));
         this._socket.SetCookie(new Cookie("x-model-type", options.ModelType.ToString()));
         this._socket.SetCookie(new Cookie("x-model-size", options.ModelSize));
+        this._socket.SetCookie(new Cookie("x-num-speaker", options.NumberOfSpeaker.ToString()));
 
         if (!string.IsNullOrWhiteSpace(options.Language))
         {
@@ -85,6 +86,7 @@ public class WhisperTranscriptor : ITranscriptor
         this._socket.SetCookie(new Cookie("x-hls-url", uri.ToString()));
         this._socket.SetCookie(new Cookie("x-model-type", options.ModelType.ToString()));
         this._socket.SetCookie(new Cookie("x-model-size", options.ModelSize));
+        this._socket.SetCookie(new Cookie("x-num-speaker", options.NumberOfSpeaker.ToString()));
 
         if (!string.IsNullOrWhiteSpace(options.Language))
         {

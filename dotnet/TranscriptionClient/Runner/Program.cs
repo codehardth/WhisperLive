@@ -6,15 +6,19 @@ class Program
 {
     public static async Task Main(string[] args)
     {
-        var serviceUri = new Uri("ws://192.168.0.98:8765");
+        var serviceUri = new Uri("ws://0.0.0.0:8765");
         using var transcriptor = new WhisperTranscriptor(serviceUri);
 
         var devices = await transcriptor.GetInputInterfacesAsync().ToListAsync();
-        var pulseDevice = devices.Single(d => d.Name == "MacBook Pro Microphone");
+        // var pulseDevice = devices.Single(d => d.Name == "MacBook Pro Microphone");
         var options = new WhisperTranscriptorOptions(
-            ModelType.WhisperX, ModelSize: "large-v2", Language: "th", IsMultiLanguage: false);
+            ModelType.Default,
+            ModelSize: "CodeHardThailand/whisper-th-medium-combined-ct2",
+            Language: "th",
+            IsMultiLanguage: false,
+            NumberOfSpeaker: 1);
         var url = new Uri(
-            "https://cdn-live.tpchannel.org/v1/0180e10a4a7809df73070d7d8760/0180e10adac40b8ed59433d5f3ce/main.m3u8");
+            "https://livestream.parliament.go.th/lives/playlist.m3u8");
         await transcriptor.StartRecordAsync(url, options);
 
         transcriptor

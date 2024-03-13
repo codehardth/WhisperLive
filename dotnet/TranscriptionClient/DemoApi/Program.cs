@@ -24,7 +24,8 @@ builder.Services.AddSingleton(
         ModelType.Default,
         "large-v2",
         null,
-        true));
+        true,
+        1));
 builder.Services.AddTransient<ITranscriptor>(
     static _ => new WhisperTranscriptor(new Uri("ws://192.168.20.98:8765")));
 

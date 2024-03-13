@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from typing import Tuple
+from typing import Tuple, Type, TypeVar
 from websockets import WebSocketServerProtocol
 from websockets.server import serve
 from websockets.protocol import State
@@ -13,6 +13,12 @@ transcription_server_address = os.environ['TRASCRIPTION_SERVER_ADDR']
 transcription_server_port = os.environ['TRANSCRIPTION_SERVER_PORT']
 client_address = os.environ['CLIENT_ADDR']
 client_port = os.environ['CLIENT_PORT']
+
+T = TypeVar("T")
+
+def getAs(self: dict[str, str], key: str, type: Type[T] = str, default: T = None) -> T | None:
+    strValue = self.get(key)
+    return default if strValue is None else type(strValue)
 
 async def echo(websocket: WebSocketServerProtocol):
     async def handler(speaker: str, data : Tuple) -> any:        
@@ -28,21 +34,17 @@ async def echo(websocket: WebSocketServerProtocol):
     cookieText = headers.get("Cookie")
     cookies = dict(item.split('=') for item in cookieText.split('; '))
 
-    device_index_str = cookies.get('x-device-index')
-    device_index = int(device_index_str) if device_index_str is not None else None
-
-    hls_uri = cookies.get('x-hls-url')
-
-    file_path = cookies.get('x-file-path')
-
-    model_type = ModelType.parse(cookies.get('x-model-type'))
-    model_size = cookies.get('x-model-size')
-    lang = cookies.get('x-language')
-    is_multilingual_str = cookies.get('x-is-multilang')
-    is_multilingual = is_multilingual_str.lower() == 'true' if is_multilingual_str is not None else False
+    device_index = getAs(cookies, 'x-device-index', int)
+    hls_uri = getAs(cookies, 'x-hls-url')
+    file_path = getAs(cookies, 'x-file-path')
+    model_type = ModelType.parse(getAs(cookies, 'x-model-type'))
+    model_size = getAs(cookies, 'x-model-size')
+    lang = getAs(cookies, 'x-language')
+    is_multilingual = getAs(cookies, 'x-is-multilang', bool)
+    num_speaker = getAs(cookies, 'x-num-speaker', int, 1)
 
     client = TranscriptionClient(
-        transcription_server_address if transcription_server_address is not None else "0.0.0.0",
+        transcription_server_address if transcription_server_address is not None else "192.168.20.98",
         int(transcription_server_port) if transcription_server_port is not None else 9090,
         is_multilingual=is_multilingual,
         lang=lang,
@@ -52,6 +54,7 @@ async def echo(websocket: WebSocketServerProtocol):
         callback=handler,
         replay_playback=True,
         playback_device_index=device_index,
+        num_speaker=num_speaker,
     )
 
     client.start(audio=file_path, hls_url=hls_uri)
