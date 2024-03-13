@@ -84,6 +84,7 @@ class Client:
         replay_playback: bool=False,
         timeout_second: int=15,
         playback_device_index: int=None,
+        num_speaker: int=1
     ):
         """
         Initializes a Client instance for audio recording and streaming to a server.
@@ -130,7 +131,7 @@ class Client:
 
         default_input = None if playback_device_index is None else self.p.get_device_info_by_index(playback_device_index)
         playback_index = None if default_input is None else default_input.get('index')
-        channels = 2 if default_input is None else default_input.get('maxOutputChannels')
+        channels = num_speaker if default_input is None else default_input.get('maxOutputChannels')
 
         self.channels = channels
 
@@ -378,6 +379,10 @@ class Client:
                         break
 
                     audio_array = self.bytes_to_float_array(data)
+
+                    if self.channels == 1:
+                        self.send_packet_to_server(audio_array.tobytes())
+
                     decode_result = self.decode(audio_array.tobytes(), 2)
 
                     if decode_result is None:
@@ -701,6 +706,7 @@ class TranscriptionClient:
         replay_playback: bool=False,
         timeout_second: int=15,
         playback_device_index: int=0,
+        num_speaker: int=1
     ):
         self.client = Client(
             host, 
@@ -713,7 +719,8 @@ class TranscriptionClient:
             callback, 
             replay_playback,
             timeout_second,
-            playback_device_index)
+            playback_device_index,
+            num_speaker)
         
     def start(self, audio=None, hls_url=None):
         """

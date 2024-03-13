@@ -24,17 +24,18 @@ async def handler(speaker, data):
 fun = handler
 
 client = TranscriptionClient(
-    "192.168.1.98",
+    "192.168.20.98",
     9090,
     is_multilingual=False,
     lang="th",
     translate=False,
     model_type=ModelType.Default,
-    model_size="CodeHardTH/whisper-th-medium-combined-ct2",
+    model_size="CodeHardThailand/whisper-th-medium-combined-ct2",
     callback=handler,
     replay_playback=True,
     timeout_second=30,
-    playback_device_index=None
+    playback_device_index=None,
+    num_speaker=1
 )
 
 # client.start(audio="./tests/we_can_work_it_out.wav")
