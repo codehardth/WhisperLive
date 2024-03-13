@@ -15,9 +15,10 @@ client_address = os.environ['CLIENT_ADDR']
 client_port = os.environ['CLIENT_PORT']
 
 async def echo(websocket: WebSocketServerProtocol):
-    async def handler(data : Tuple) -> any:        
+    async def handler(speaker: str, data : Tuple) -> any:        
         list = [e for e in data]
         res = json.dumps({
+            'speaker': speaker,
             'messages': list
         }, ensure_ascii=False)
 
