@@ -67,7 +67,7 @@ public class WhisperTranscriptor : ITranscriptor
             var bytesRead = 0;
             while (!ct.IsCancellationRequested)
             {
-                await Task.Delay(300, ct);
+                await Task.Delay(options.TranscriptionDelay, ct);
 
                 var read = await ms.ReadAsync(buffer, 0, buffer.Length, ct);
 
@@ -85,19 +85,62 @@ public class WhisperTranscriptor : ITranscriptor
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
     {
-        var sessionId = Guid.NewGuid();
-
         // FIXME: check if disposing this causing any bug
         await using var wavefile = new WaveFileReader(filePath);
 
+        return await this.TranscribeAsync(
+            wavefile,
+            options with
+            {
+                NumberOfSpeaker = (uint)wavefile.NumChannels,
+            }, cancellationToken);
+    }
+
+    public async Task<Guid> TranscribeAsync(
+        Stream stream,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        var sessionId = Guid.NewGuid();
+
         await InternalTranscribeAsync(
-            wavefile.IterateAsync,
+            IterateStreamAsync,
             sessionId,
-            wavefile.NumChannels,
+            (int)options.NumberOfSpeaker,
             options,
             cancellationToken);
 
         return sessionId;
+
+        async IAsyncEnumerable<byte[]> IterateStreamAsync(CancellationToken ct)
+        {
+            if (stream is WaveFileReader waveReaderStream)
+            {
+                await foreach (var chunk in waveReaderStream.IterateAsync(ct))
+                {
+                    await Task.Delay(options.TranscriptionDelay, ct);
+
+                    yield return chunk;
+                }
+            }
+            else
+            {
+                const int chunkSize = 4096;
+
+                var buffer = new byte[chunkSize * options.NumberOfSpeaker * 2]; // 2 bytes per sample
+                var bytesRead = 0;
+                while (!ct.IsCancellationRequested)
+                {
+                    await Task.Delay(options.TranscriptionDelay, ct);
+
+                    var read = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
+
+                    bytesRead += read;
+
+                    yield return buffer;
+                }
+            }
+        }
     }
 
     private async Task InternalTranscribeAsync(

@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using FFMpegCore;
+using FFMpegCore.Pipes;
 
 namespace Transcriptor.Py.Wrapper;
 
@@ -127,7 +129,8 @@ public sealed class WaveFileReader : Stream
         this._dataChunkSize = dataChunkSize;
     }
 
-    public async IAsyncEnumerable<byte[]> IterateAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<byte[]> IterateAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         this.Seek(44, SeekOrigin.Begin);
 
@@ -212,5 +215,32 @@ public sealed class WaveFileReader : Stream
     public override void Write(byte[] buffer, int offset, int count)
     {
         throw new NotSupportedException();
+    }
+
+    public static WaveFileReader OpenRead(string filePath)
+    {
+        var fi = new FileInfo(filePath);
+
+        if (!fi.Exists)
+        {
+            throw new FileNotFoundException();
+        }
+
+        if (fi.Extension is ".wav" or ".wave")
+        {
+            return new WaveFileReader(filePath);
+        }
+
+        var ms = new MemoryStream();
+        var succ = FFMpegArguments.FromFileInput(fi)
+            .OutputToPipe(new StreamPipeSink(ms), options => { options.WithCustomArgument("-f wav"); })
+            .ProcessSynchronously();
+
+        if (!succ)
+        {
+            throw new InvalidOperationException($"Unable to convert {filePath} to wav file");
+        }
+
+        return new WaveFileReader(ms);
     }
 }

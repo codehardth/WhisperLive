@@ -4,22 +4,31 @@ namespace Transcriptor.Py.Wrapper.Implementation;
 
 public sealed record WhisperTranscriptorOptions
 {
-    public WhisperTranscriptorOptions(ModelType ModelType,
+    public WhisperTranscriptorOptions(
+        ModelType ModelType,
         string ModelSize,
         string? Language,
         bool IsMultiLanguage,
-        uint NumberOfSpeaker)
+        uint NumberOfSpeaker,
+        TimeSpan transcriptionDelay)
     {
         this.ModelType = ModelType;
         this.ModelSize = ModelSize;
         this.Language = Language;
         this.IsMultiLanguage = IsMultiLanguage;
         this.NumberOfSpeaker = Math.Clamp(NumberOfSpeaker, 1, 4);
+        this.TranscriptionDelay = transcriptionDelay;
     }
 
     public ModelType ModelType { get; init; }
+
     public string ModelSize { get; init; }
+
     public string? Language { get; init; }
+
     public bool IsMultiLanguage { get; init; }
+
     public uint NumberOfSpeaker { get; init; }
+
+    public TimeSpan TranscriptionDelay { get; init; }
 }

@@ -37,7 +37,8 @@ public class TranscriptionHub : Hub, IDiscoverableHub
             yield break;
         }
 
-        var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1);
+        var options =
+            new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1, TimeSpan.FromMilliseconds(100));
         var sessionId = await this._transcriptor.TranscribeAsync(fileInfo.FullName, options, cancellationToken);
 
         foreach (var result in this._transcriptor.Distinct())
@@ -65,7 +66,8 @@ public class TranscriptionHub : Hub, IDiscoverableHub
         bool multiLang,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1);
+        var options =
+            new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1, TimeSpan.FromMilliseconds(100));
         var sessionId = await this._transcriptor.TranscribeAsync(uri, options, cancellationToken);
 
         foreach (var result in this._transcriptor.Distinct())

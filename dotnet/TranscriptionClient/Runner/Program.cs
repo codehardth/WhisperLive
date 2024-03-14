@@ -1,4 +1,5 @@
-﻿using Transcriptor.Py.Wrapper.Enums;
+﻿using Transcriptor.Py.Wrapper;
+using Transcriptor.Py.Wrapper.Enums;
 using Transcriptor.Py.Wrapper.Implementation;
 
 class Program
@@ -13,7 +14,8 @@ class Program
             ModelSize: "CodeHardThailand/whisper-th-medium-combined-ct2",
             Language: "th",
             IsMultiLanguage: false,
-            NumberOfSpeaker: 1);
+            NumberOfSpeaker: 1,
+            transcriptionDelay: TimeSpan.FromMilliseconds(100));
         var url = new Uri(
             "https://livestream.parliament.go.th/lives/playlist.m3u8");
         // await transcriptor.StartRecordAsync(url, options);
@@ -36,8 +38,13 @@ class Program
 
         var cts = new CancellationTokenSource();
 
+        await using var stream = WaveFileReader.OpenRead("/home/deszolate/Downloads/test_resampled.wav");
+
         var session =
-            await transcriptor.TranscribeAsync("/home/deszolate/Downloads/test_resampled.wav", options, cts.Token);
+            await transcriptor.TranscribeAsync(stream, options with
+            {
+                NumberOfSpeaker = (uint)stream.NumChannels,
+            }, cts.Token);
 
         await Task.Delay(1000 * 60);
 

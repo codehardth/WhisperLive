@@ -16,12 +16,17 @@ public interface ITranscriptor : IObservable<TranscriptResult>, IDisposable
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default);
 
-    Task StopAsync(Guid sessionId, CancellationToken cancellationToken = default);
-
     Task<Guid> TranscribeAsync(
         string filePath,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default);
+
+    Task<Guid> TranscribeAsync(
+        Stream stream,
+        WhisperTranscriptorOptions options,
+        CancellationToken cancellationToken = default);
+
+    Task StopAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
     event TranscriptorReadyEventHandler TranscriptorReady;
 
