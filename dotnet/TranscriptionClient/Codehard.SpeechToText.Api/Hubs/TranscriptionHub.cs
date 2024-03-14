@@ -38,7 +38,7 @@ public class TranscriptionHub : Hub, IDiscoverableHub
         }
 
         var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1);
-        await this._transcriptor.TranscriptAsync(fileInfo.FullName, options, cancellationToken);
+        var sessionId = await this._transcriptor.TranscribeAsync(fileInfo.FullName, options, cancellationToken);
 
         foreach (var result in this._transcriptor.Distinct())
         {
@@ -53,35 +53,7 @@ public class TranscriptionHub : Hub, IDiscoverableHub
             }
         }
 
-        await this._transcriptor.StopAsync(CancellationToken.None);
-    }
-
-    [HubMethodName("microphone")]
-    public async IAsyncEnumerable<string> TranscribeFromInputDeviceAsync(
-        int deviceIndex,
-        ModelType model,
-        string modelSize,
-        string? language,
-        bool multiLang,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1);
-        await this._transcriptor.StartRecordAsync(deviceIndex, options, cancellationToken);
-
-        foreach (var result in this._transcriptor.Distinct())
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-
-            foreach (var message in result.Messages)
-            {
-                yield return message.Text;
-            }
-        }
-
-        await this._transcriptor.StopAsync(CancellationToken.None);
+        await this._transcriptor.StopAsync(sessionId, CancellationToken.None);
     }
 
     [HubMethodName("stream")]
@@ -94,7 +66,7 @@ public class TranscriptionHub : Hub, IDiscoverableHub
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var options = new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1);
-        await this._transcriptor.StartRecordAsync(uri, options, cancellationToken);
+        var sessionId = await this._transcriptor.TranscribeAsync(uri, options, cancellationToken);
 
         foreach (var result in this._transcriptor.Distinct())
         {
@@ -109,6 +81,6 @@ public class TranscriptionHub : Hub, IDiscoverableHub
             }
         }
 
-        await this._transcriptor.StopAsync(CancellationToken.None);
+        await this._transcriptor.StopAsync(sessionId, CancellationToken.None);
     }
 }

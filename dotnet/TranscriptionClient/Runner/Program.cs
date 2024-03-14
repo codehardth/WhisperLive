@@ -1,16 +1,13 @@
-﻿using System.Reactive.Linq;
-using Transcriptor.Py.Wrapper.Enums;
+﻿using Transcriptor.Py.Wrapper.Enums;
 using Transcriptor.Py.Wrapper.Implementation;
 
 class Program
 {
     public static async Task Main(string[] args)
     {
-        var serviceUri = new Uri("ws://0.0.0.0:8765");
+        var serviceUri = new Uri("ws://192.168.20.98:9090");
         using var transcriptor = new WhisperTranscriptor(serviceUri);
 
-        var devices = await transcriptor.GetInputInterfacesAsync().ToListAsync();
-        // var pulseDevice = devices.Single(d => d.Name == "MacBook Pro Microphone");
         var options = new WhisperTranscriptorOptions(
             ModelType.Default,
             ModelSize: "CodeHardThailand/whisper-th-medium-combined-ct2",
@@ -19,25 +16,31 @@ class Program
             NumberOfSpeaker: 1);
         var url = new Uri(
             "https://livestream.parliament.go.th/lives/playlist.m3u8");
-        await transcriptor.StartRecordAsync(url, options);
+        // await transcriptor.StartRecordAsync(url, options);
 
-        transcriptor
-            .SelectMany(m => m.Messages)
-            .Select(m => m.Text)
-            .Subscribe(Console.WriteLine);
+        transcriptor.MessageArrived += (sessionId, speaker, segments) =>
+        {
+            var text =
+                segments.GroupBy(s => s.Start)
+                    .OrderByDescending(g => g.Max(s => s.End))
+                    .SelectMany(g => g)
+                    .FirstOrDefault();
 
-        await Task.Delay(-1);
-    }
+            if (text is not null)
+            {
+                Console.WriteLine($"[{text.End}]{speaker}: {text.Text}");
+            }
 
-    private static float[] BytesToFloatArray(byte[] audioBytes)
-    {
-        // Convert audio data from bytes to a float array
-        // Assumes that the audio data is in 16-bit PCM format
-        // Normalizes the audio data to have values between -1 and 1
+            return Task.CompletedTask;
+        };
 
-        var rawShortData = audioBytes.Select(b => BitConverter.ToInt16([b, 0], 0)).ToArray();
-        var rawFloatData = Array.ConvertAll(rawShortData, s => s / 32768.0f);
+        var cts = new CancellationTokenSource();
 
-        return rawFloatData;
+        var session =
+            await transcriptor.TranscribeAsync("/home/deszolate/Downloads/test_resampled.wav", options, cts.Token);
+
+        await Task.Delay(1000 * 60);
+
+        await cts.CancelAsync();
     }
 }

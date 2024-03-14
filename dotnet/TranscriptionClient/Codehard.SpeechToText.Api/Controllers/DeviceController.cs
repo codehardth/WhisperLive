@@ -17,9 +17,6 @@ public class DeviceController : Controller
     [HttpGet]
     public IActionResult GetDevices(CancellationToken cancellationToken = default)
     {
-        var devices = 
-            this._transcriptor.GetInputInterfacesAsync(cancellationToken);
-
-        return this.Ok(devices);
+        return this.Ok(Array.Empty<int>());
     }
 }
