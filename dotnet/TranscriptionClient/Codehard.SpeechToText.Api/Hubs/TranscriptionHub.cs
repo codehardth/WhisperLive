@@ -25,7 +25,6 @@ public class TranscriptionHub : Hub, IDiscoverableHub
     [HubMethodName("file")]
     public async IAsyncEnumerable<string> TranscribeWithFileAsync(
         Guid fileId,
-        ModelType model,
         string modelSize,
         string? language,
         bool multiLang,
@@ -38,8 +37,8 @@ public class TranscriptionHub : Hub, IDiscoverableHub
         }
 
         var options =
-            new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1, TimeSpan.FromMilliseconds(100));
-        var sessionId = await this._transcriptor.TranscribeAsync(fileInfo.FullName, options, cancellationToken);
+            new WhisperTranscriptorOptions(modelSize, language, multiLang, TimeSpan.FromMilliseconds(100));
+        using var session = await this._transcriptor.TranscribeAsync(fileInfo.FullName, options, cancellationToken);
 
         foreach (var result in this._transcriptor.Distinct())
         {
@@ -54,21 +53,20 @@ public class TranscriptionHub : Hub, IDiscoverableHub
             }
         }
 
-        await this._transcriptor.StopAsync(sessionId, CancellationToken.None);
+        await this._transcriptor.StopAsync(session.Id, CancellationToken.None);
     }
 
     [HubMethodName("stream")]
     public async IAsyncEnumerable<string> TranscribeFromHlsStreamingAsync(
         Uri uri,
-        ModelType model,
         string modelSize,
         string? language,
         bool multiLang,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var options =
-            new WhisperTranscriptorOptions(model, modelSize, language, multiLang, 1, TimeSpan.FromMilliseconds(100));
-        var sessionId = await this._transcriptor.TranscribeAsync(uri, options, cancellationToken);
+            new WhisperTranscriptorOptions(modelSize, language, multiLang, TimeSpan.FromMilliseconds(100));
+        using var session = await this._transcriptor.TranscribeAsync(uri, options, cancellationToken);
 
         foreach (var result in this._transcriptor.Distinct())
         {
@@ -83,6 +81,6 @@ public class TranscriptionHub : Hub, IDiscoverableHub
             }
         }
 
-        await this._transcriptor.StopAsync(sessionId, CancellationToken.None);
+        await this._transcriptor.StopAsync(session.Id, CancellationToken.None);
     }
 }

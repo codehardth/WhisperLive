@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FFMpegCore;
-using FFMpegCore.Pipes;
 using NumSharp;
 using NumSharp.Utilities;
 using Transcriptor.Py.Wrapper.Abstraction;
@@ -26,119 +25,88 @@ public class WhisperTranscriptor : ITranscriptor
 
     private WebSocket? _socket;
     private bool _disposed;
+    private DateTimeOffset _lastResponseReceived = DateTimeOffset.UtcNow;
 
     public WhisperTranscriptor(Uri serviceUri)
     {
         this._serviceUri = serviceUri;
     }
 
-    public async Task<Guid> TranscribeAsync(
+    public async Task<TranscriptionSession> TranscribeAsync(
         Uri uri,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
     {
+        var analysis = await FFProbe.AnalyseAsync(uri, cancellationToken: cancellationToken);
+        var numberOfChannel = options.ForcedAudioChannels ?? analysis.PrimaryAudioStream?.Channels ?? 1;
+
         var sessionId = Guid.NewGuid();
 
         await InternalTranscribeAsync(
-            IterateStreamAsync,
+            ct => PcmReader.FromHls(uri, numberOfChannel, ct),
             sessionId,
-            1,
+            numberOfChannel,
             options,
             cancellationToken);
 
-        return sessionId;
-
-        async IAsyncEnumerable<byte[]> IterateStreamAsync(CancellationToken ct)
-        {
-            const int sampleRate = 16000;
-            const int audioChannel = 1;
-            const int chunkSize = 4096;
-
-            await using var ms = new QueueStream();
-            var args = FFMpegArguments.FromUrlInput(uri)
-                .OutputToPipe(new StreamPipeSink(ms),
-                    options =>
-                    {
-                        options.WithCustomArgument($"-f s16le -ac {audioChannel} -acodec pcm_s16le -ar {sampleRate}");
-                    });
-            var readHlsStreamTask = args.CancellableThrough(ct).ProcessAsynchronously();
-
-            var buffer = new byte[chunkSize * audioChannel * 2]; // 2 bytes per sample
-            var bytesRead = 0;
-            while (!ct.IsCancellationRequested)
-            {
-                await Task.Delay(options.TranscriptionDelay, ct);
-
-                var read = await ms.ReadAsync(buffer, 0, buffer.Length, ct);
-
-                bytesRead += read;
-
-                yield return buffer;
-            }
-
-            await readHlsStreamTask;
-        }
+        return new TranscriptionSession(sessionId, default);
     }
 
-    public async Task<Guid> TranscribeAsync(
+    public async Task<TranscriptionSession> TranscribeAsync(
         string filePath,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
     {
-        // FIXME: check if disposing this causing any bug
-        await using var wavefile = new WaveFileReader(filePath);
+        var analysis = await FFProbe.AnalyseAsync(filePath, new FFOptions(), cancellationToken);
+        var stream = PcmReader.FromFile(filePath);
 
-        return await this.TranscribeAsync(
-            wavefile,
-            options with
-            {
-                NumberOfSpeaker = (uint)wavefile.NumChannels,
-            }, cancellationToken);
+        var session = await this.TranscribeAsync(stream, options, analysis, cancellationToken);
+
+        return session;
     }
 
-    public async Task<Guid> TranscribeAsync(
+    public Task<TranscriptionSession> TranscribeAsync(
         Stream stream,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
     {
+        return this.TranscribeAsync(stream, options, default, cancellationToken);
+    }
+
+    public async Task<TranscriptionSession> TranscribeAsync(
+        Stream stream,
+        WhisperTranscriptorOptions options,
+        IMediaAnalysis? mediaAnalysis = default,
+        CancellationToken cancellationToken = default)
+    {
+        var numberOfChannels = options.ForcedAudioChannels ?? mediaAnalysis?.PrimaryAudioStream?.Channels ?? 1;
+
         var sessionId = Guid.NewGuid();
 
         await InternalTranscribeAsync(
             IterateStreamAsync,
             sessionId,
-            (int)options.NumberOfSpeaker,
+            numberOfChannels,
             options,
             cancellationToken);
 
-        return sessionId;
+        return new TranscriptionSession(sessionId, stream);
 
         async IAsyncEnumerable<byte[]> IterateStreamAsync(CancellationToken ct)
         {
-            if (stream is WaveFileReader waveReaderStream)
+            const int chunkSize = 4096;
+
+            var buffer = new byte[chunkSize * options.NumberOfSpeaker * 2]; // 2 bytes per sample
+            while (!ct.IsCancellationRequested)
             {
-                await foreach (var chunk in waveReaderStream.IterateAsync(ct))
+                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
+
+                if (bytesRead == 0)
                 {
-                    await Task.Delay(options.TranscriptionDelay, ct);
-
-                    yield return chunk;
+                    yield break;
                 }
-            }
-            else
-            {
-                const int chunkSize = 4096;
 
-                var buffer = new byte[chunkSize * options.NumberOfSpeaker * 2]; // 2 bytes per sample
-                var bytesRead = 0;
-                while (!ct.IsCancellationRequested)
-                {
-                    await Task.Delay(options.TranscriptionDelay, ct);
-
-                    var read = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
-
-                    bytesRead += read;
-
-                    yield return buffer;
-                }
+                yield return buffer;
             }
         }
     }
@@ -157,6 +125,8 @@ public class WhisperTranscriptor : ITranscriptor
         this._socket = new WebSocket(this._serviceUri.AbsoluteUri);
         this._socket.OnMessage += (sender, args) =>
         {
+            this._lastResponseReceived = DateTimeOffset.UtcNow;
+
             var payload = JsonSerializer.Deserialize<JsonDocument>(args.Data, _serializerOptions)!;
 
             if (payload.RootElement.TryGetProperty("message", out var v))
@@ -170,7 +140,7 @@ public class WhisperTranscriptor : ITranscriptor
                 }
                 else if (rawText == "DISCONNECT")
                 {
-                    this.SessionEnded?.Invoke(sessionId);
+                    this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.ServerDisconnected);
                 }
             }
             else if (payload.RootElement.TryGetProperty("segments", out var segmentsJsonElement))
@@ -202,7 +172,7 @@ public class WhisperTranscriptor : ITranscriptor
                     uid = sessionId,
                     language = options.Language,
                     task = "transcribe",
-                    model = options.ModelSize,
+                    model = options.Model,
                     use_vad = false,
                     type = options.ModelType.ToString(),
                     channel = audioChannelCount,
@@ -216,16 +186,22 @@ public class WhisperTranscriptor : ITranscriptor
 
                 await foreach (var buffer in streamingTask(ct))
                 {
+                    await Task.Delay(options.TranscriptionDelay, ct);
+
                     var data = BytesToFloatArray(buffer).ToByteArray();
                     this._socket.Send(data);
-
-                    await Task.Delay(100, ct);
                 }
 
-                while (!ct.IsCancellationRequested)
+                while (!ct.IsCancellationRequested &&
+                       DateTimeOffset.UtcNow.Subtract(this._lastResponseReceived).TotalSeconds <
+                       options.TranscriptionTimeout.Seconds)
                 {
                     await Task.Delay(1000, ct);
                 }
+
+                this._socket.Close(CloseStatusCode.Normal);
+
+                this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.Completed);
             }
             catch (TaskCanceledException)
             {
@@ -235,6 +211,8 @@ public class WhisperTranscriptor : ITranscriptor
                 {
                     t?.Dispose();
                 }
+
+                this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.Error);
             }
         }, ct);
 
@@ -308,7 +286,7 @@ public class WhisperTranscriptor : ITranscriptor
             return Task.CompletedTask;
         };
 
-        this.SessionEnded += _ =>
+        this.SessionEnded += (_, _) =>
         {
             observer.OnCompleted();
 

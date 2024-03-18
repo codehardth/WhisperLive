@@ -77,11 +77,9 @@
 
         var options =
             new WhisperTranscriptorOptions(
-                ModelType.Default,
-                ModelSize: "CodeHardThailand/whisper-th-medium-combined-ct2",
-                Language: "th",
-                IsMultiLanguage: false,
-                NumberOfSpeaker: 1,
+                model: "CodeHardThailand/whisper-th-medium-combined-ct2",
+                language: "th",
+                isMultiLanguage: false,
                 transcriptionDelay: TimeSpan.FromMilliseconds(100));
         var url = new Uri("https://tv-live.tpchannel.org/live/tv.m3u8");
 

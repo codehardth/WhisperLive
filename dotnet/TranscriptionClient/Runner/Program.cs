@@ -1,6 +1,6 @@
-﻿using Transcriptor.Py.Wrapper;
-using Transcriptor.Py.Wrapper.Enums;
+﻿using Transcriptor.Py.Wrapper.Enums;
 using Transcriptor.Py.Wrapper.Implementation;
+using Transcriptor.Py.Wrapper.Models;
 
 class Program
 {
@@ -10,20 +10,26 @@ class Program
         using var transcriptor = new WhisperTranscriptor(serviceUri);
 
         var options = new WhisperTranscriptorOptions(
-            ModelType.Default,
-            ModelSize: "CodeHardThailand/whisper-th-medium-combined-ct2",
-            Language: "th",
-            IsMultiLanguage: false,
-            NumberOfSpeaker: 1,
-            transcriptionDelay: TimeSpan.FromMilliseconds(100));
+            modelType: ModelType.Default,
+            model: "CodeHardThailand/whisper-th-medium-combined-ct2",
+            language: "en",
+            forcedAudioChannels: 1,
+            isMultiLanguage: false,
+            transcriptionDelay: TimeSpan.FromMilliseconds(300),
+            transcriptionTimeout: TimeSpan.FromSeconds(30));
         var url = new Uri(
             "https://livestream.parliament.go.th/lives/playlist.m3u8");
         // await transcriptor.StartRecordAsync(url, options);
 
+        var cts = new CancellationTokenSource();
+
+        var buffer = new Dictionary<double, Segment>();
+
         transcriptor.MessageArrived += (sessionId, speaker, segments) =>
         {
             var text =
-                segments.GroupBy(s => s.Start)
+                segments
+                    .GroupBy(s => s.Start)
                     .OrderByDescending(g => g.Max(s => s.End))
                     .SelectMany(g => g)
                     .FirstOrDefault();
@@ -36,18 +42,26 @@ class Program
             return Task.CompletedTask;
         };
 
-        var cts = new CancellationTokenSource();
+        transcriptor.SessionEnded += (id, reason) =>
+        {
+            Console.WriteLine($"{id} ended with {reason}");
 
-        await using var stream = WaveFileReader.OpenRead("/home/deszolate/Downloads/test_resampled.wav");
+            cts.Cancel();
 
-        var session =
-            await transcriptor.TranscribeAsync(stream, options with
-            {
-                NumberOfSpeaker = (uint)stream.NumChannels,
-            }, cts.Token);
+            return Task.CompletedTask;
+        };
 
-        await Task.Delay(1000 * 60);
+        var filePath = "/home/deszolate/Downloads/we_can_work_it_out.aac";
+        // await using var stream = WaveFileReader.OpenRead(filePath);
 
-        await cts.CancelAsync();
+        using var session = await transcriptor.TranscribeAsync(filePath, options with
+        {
+            NumberOfSpeaker = 1,
+        }, CancellationToken.None);
+
+        Console.WriteLine("Press enter key to stop");
+        Console.ReadLine();
+
+        await transcriptor.StopAsync(session.Id, CancellationToken.None);
     }
 }
