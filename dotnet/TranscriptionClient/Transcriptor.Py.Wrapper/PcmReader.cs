@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using FFMpegCore;
 using FFMpegCore.Pipes;
 
@@ -33,27 +34,43 @@ public static class PcmReader
         return ms;
     }
 
-    public static async IAsyncEnumerable<byte[]> FromHls(
+    public static IAsyncEnumerable<byte[]> FromFileAsync(
+        string filePath,
+        int channels = AudioChannel,
+        CancellationToken ct = default)
+    {
+        return InternalReadAsync<MemoryStream>(FFMpegArguments.FromFileInput(filePath), channels, ct);
+    }
+
+    public static IAsyncEnumerable<byte[]> FromHlsAsync(
         Uri uri,
         int channels = AudioChannel,
         CancellationToken ct = default)
     {
-        await using var ms = new QueueStream();
-        var argument =
-            FFMpegArguments.FromUrlInput(uri)
-                .OutputToPipe(new StreamPipeSink(ms), options =>
-                {
-                    options.WithCustomArgument(
-                        $"-f {Format} -acodec {AudioCodec} -ac {channels} -ar {SampleRate}");
-                });
+        return InternalReadAsync<QueueStream>(FFMpegArguments.FromUrlInput(uri), channels, ct);
+    }
 
-        var readHlsStreamTask = argument.CancellableThrough(ct).ProcessAsynchronously();
+    private static async IAsyncEnumerable<byte[]> InternalReadAsync<TStream>(
+        FFMpegArguments arguments,
+        int channels,
+        [EnumeratorCancellation] CancellationToken ct)
+        where TStream : MemoryStream, new()
+    {
+        await using var bufferStream = new TStream();
+        var argument =
+            arguments.OutputToPipe(new StreamPipeSink(bufferStream), options =>
+            {
+                options.WithCustomArgument(
+                    $"-f {Format} -acodec {AudioCodec} -ac {channels} -ar {SampleRate}");
+            });
+
+        var streamTask = argument.CancellableThrough(ct).ProcessAsynchronously().ConfigureAwait(false);
 
         var buffer = new byte[ChunkSize * AudioChannel * 2]; // 2 bytes per sample
         var bytesRead = -1;
         while (!ct.IsCancellationRequested)
         {
-            var read = await ms.ReadAsync(buffer, 0, buffer.Length, ct);
+            var read = await bufferStream.ReadAsync(buffer, ct).ConfigureAwait(false);
 
             // Don't feed the data yet if there is no buffer available from the start
             if (read == 0 && bytesRead == -1)
@@ -66,6 +83,6 @@ public static class PcmReader
             yield return buffer;
         }
 
-        await readHlsStreamTask;
+        await streamTask;
     }
 }

@@ -1,3 +1,4 @@
+using Transcriptor.Py.Wrapper.Abstraction;
 using Transcriptor.Py.Wrapper.Enums;
 
 namespace Transcriptor.Py.Wrapper.Implementation;
@@ -10,16 +11,20 @@ public sealed record WhisperTranscriptorOptions
         string? language,
         bool isMultiLanguage,
         int? forcedAudioChannels,
+        bool useVoiceActivityDetection,
         TimeSpan transcriptionDelay,
-        TimeSpan transcriptionTimeout)
+        TimeSpan transcriptionTimeout,
+        ISegmentFilter? segmentFilter)
     {
         this.ModelType = modelType;
         this.Model = model;
         this.Language = language;
         this.ForcedAudioChannels = forcedAudioChannels;
+        this.UseVoiceActivityDetection = useVoiceActivityDetection;
         this.IsMultiLanguage = isMultiLanguage;
         this.TranscriptionDelay = transcriptionDelay;
         this.TranscriptionTimeout = transcriptionTimeout;
+        this.SegmentFilter = segmentFilter;
     }
 
     public WhisperTranscriptorOptions(
@@ -34,8 +39,10 @@ public sealed record WhisperTranscriptorOptions
             language,
             isMultiLanguage,
             default,
+            true,
             transcriptionDelay,
-            transcriptionTimeout)
+            transcriptionTimeout,
+            default)
     {
     }
 
@@ -50,8 +57,10 @@ public sealed record WhisperTranscriptorOptions
             language,
             isMultiLanguage,
             default,
+            true,
             transcriptionDelay,
-            TimeSpan.FromSeconds(30))
+            TimeSpan.FromSeconds(30),
+            default)
     {
     }
 
@@ -65,8 +74,10 @@ public sealed record WhisperTranscriptorOptions
             language,
             isMultiLanguage,
             default,
+            true,
             TimeSpan.FromSeconds(300),
-            TimeSpan.FromSeconds(30))
+            TimeSpan.FromSeconds(30),
+            default)
     {
     }
 
@@ -82,7 +93,11 @@ public sealed record WhisperTranscriptorOptions
 
     public int? ForcedAudioChannels { get; init; }
 
+    public bool UseVoiceActivityDetection { get; set; }
+
     public TimeSpan TranscriptionDelay { get; init; }
 
     public TimeSpan TranscriptionTimeout { get; init; }
+
+    public ISegmentFilter? SegmentFilter { get; set; }
 }

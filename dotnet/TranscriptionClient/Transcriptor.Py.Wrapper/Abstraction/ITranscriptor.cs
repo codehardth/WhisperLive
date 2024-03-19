@@ -6,7 +6,7 @@ namespace Transcriptor.Py.Wrapper.Abstraction;
 
 public delegate void TranscriptorReadyEventHandler(Guid sessionId, ITranscriptor sender);
 
-public delegate Task TranscriptionMessageArrivedHandler(Guid sessionId, string? speaker, Segment[] segments);
+public delegate Task TranscriptionMessageArrivedHandler(Guid sessionId, string? speaker, IEnumerable<Segment> segments);
 
 public enum TranscriptionSessionEndedReason
 {
