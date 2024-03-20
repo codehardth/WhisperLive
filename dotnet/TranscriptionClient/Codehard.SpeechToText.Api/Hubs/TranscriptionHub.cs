@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Codehard.SpeechToText.Api.Abstractions;
 using Microsoft.AspNetCore.SignalR;
 using Transcriptor.Py.Wrapper.Abstraction;
+using Transcriptor.Py.Wrapper.Configurations;
 using Transcriptor.Py.Wrapper.Enums;
 using Transcriptor.Py.Wrapper.Implementation;
 

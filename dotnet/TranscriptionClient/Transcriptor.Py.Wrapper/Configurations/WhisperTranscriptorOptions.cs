@@ -1,7 +1,7 @@
 using Transcriptor.Py.Wrapper.Abstraction;
 using Transcriptor.Py.Wrapper.Enums;
 
-namespace Transcriptor.Py.Wrapper.Implementation;
+namespace Transcriptor.Py.Wrapper.Configurations;
 
 public sealed record WhisperTranscriptorOptions
 {

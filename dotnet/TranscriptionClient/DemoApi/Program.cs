@@ -3,6 +3,7 @@ using Hangfire;
 using Hangfire.MemoryStorage;
 using MediatR;
 using Transcriptor.Py.Wrapper.Abstraction;
+using Transcriptor.Py.Wrapper.Configurations;
 using Transcriptor.Py.Wrapper.Enums;
 using Transcriptor.Py.Wrapper.Implementation;
 

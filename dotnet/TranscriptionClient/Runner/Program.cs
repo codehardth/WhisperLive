@@ -1,6 +1,7 @@
-﻿using System.Reactive.Linq;
+﻿using Docker.DotNet;
 using Runner;
 using Transcriptor.Py.Wrapper.Abstraction;
+using Transcriptor.Py.Wrapper.Configurations;
 using Transcriptor.Py.Wrapper.Enums;
 using Transcriptor.Py.Wrapper.Implementation;
 using Transcriptor.Py.Wrapper.Models;
@@ -9,7 +10,28 @@ class Program
 {
     public static async Task Main(string[] args)
     {
-        var serviceUri = new Uri("ws://192.168.20.98:9091");
+        var serviceUri = new Uri("ws://0.0.0.0:9999");
+
+        using var dockerClient =
+            new DockerClientConfiguration(new Uri("http://127.0.0.1:2375"))
+                .CreateClient();
+        var managerOptions = new TranscriptionManagerOptions(
+            new Uri("ws://0.0.0.0"),
+            "/home/deszolate/Documents/WhisperLive/images");
+        var manager = new TranscriptionServerManager(dockerClient, managerOptions);
+
+        var id1 = await manager.StartInstanceAsync(9999, "gpu");
+        var id2 = await manager.StartInstanceAsync(10000, "gpu");
+        var id3 = await manager.StartInstanceAsync(10001, "gpu");
+
+        await Task.Delay(3000);
+
+        await manager.StopInstanceAsync(id1);
+        await manager.StopInstanceAsync(id2);
+        await manager.StopInstanceAsync(id3);
+
+        return;
+
         // var serviceUri = new Uri("ws://192.168.20.98:9090");
         using var transcriptor = new WhisperTranscriptor(serviceUri);
 

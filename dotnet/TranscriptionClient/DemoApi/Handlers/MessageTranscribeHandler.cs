@@ -5,6 +5,7 @@ using DemoApi.Extensions;
 using Hangfire;
 using MediatR;
 using Transcriptor.Py.Wrapper.Abstraction;
+using Transcriptor.Py.Wrapper.Configurations;
 using Transcriptor.Py.Wrapper.Implementation;
 
 namespace DemoApi.Handlers;

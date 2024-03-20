@@ -1,4 +1,5 @@
 using FFMpegCore;
+using Transcriptor.Py.Wrapper.Configurations;
 using Transcriptor.Py.Wrapper.Implementation;
 using Transcriptor.Py.Wrapper.Models;
 

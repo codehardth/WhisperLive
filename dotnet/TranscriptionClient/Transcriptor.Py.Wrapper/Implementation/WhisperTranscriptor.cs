@@ -4,6 +4,7 @@ using FFMpegCore;
 using NumSharp;
 using NumSharp.Utilities;
 using Transcriptor.Py.Wrapper.Abstraction;
+using Transcriptor.Py.Wrapper.Configurations;
 using Transcriptor.Py.Wrapper.Models;
 using WebSocketSharp;
 using JsonSerializer = System.Text.Json.JsonSerializer;
@@ -19,7 +20,8 @@ public class WhisperTranscriptor : ITranscriptor
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    private readonly Uri _serviceUri;
+    private readonly Uri? _serviceUri;
+    private readonly ITranscriptionServerManager? _serverManager;
     private readonly SemaphoreSlim semaphore = new(1, 1);
     private readonly Dictionary<Guid, CancellationTokenSource?> pendingCancellationTokenSources = new();
 
@@ -30,6 +32,11 @@ public class WhisperTranscriptor : ITranscriptor
     public WhisperTranscriptor(Uri serviceUri)
     {
         this._serviceUri = serviceUri;
+    }
+
+    public WhisperTranscriptor(ITranscriptionServerManager serverManager)
+    {
+        this._serverManager = serverManager;
     }
 
     public async Task<TranscriptionSession> TranscribeAsync(
@@ -127,7 +134,19 @@ public class WhisperTranscriptor : ITranscriptor
 
         var serverReady = false;
 
-        this._socket = new WebSocket(this._serviceUri.AbsoluteUri);
+        if (this._serviceUri is { } uri)
+        {
+            this._socket = new WebSocket(uri.AbsoluteUri);
+        }
+        else if (this._serverManager is { } manager)
+        {
+            throw new NotImplementedException();
+        }
+        else
+        {
+            throw new NotSupportedException();
+        }
+
         this._socket.OnMessage += (sender, args) =>
         {
             this._lastResponseReceived = DateTimeOffset.UtcNow;
