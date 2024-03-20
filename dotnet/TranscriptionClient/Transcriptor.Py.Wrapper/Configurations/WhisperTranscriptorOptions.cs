@@ -89,8 +89,6 @@ public sealed record WhisperTranscriptorOptions
 
     public bool IsMultiLanguage { get; init; }
 
-    public uint NumberOfSpeaker { get; init; }
-
     public int? ForcedAudioChannels { get; init; }
 
     public bool UseVoiceActivityDetection { get; set; }

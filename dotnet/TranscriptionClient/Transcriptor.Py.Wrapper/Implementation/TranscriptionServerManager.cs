@@ -2,6 +2,7 @@ using Docker.DotNet;
 using Docker.DotNet.Models;
 using Transcriptor.Py.Wrapper.Abstraction;
 using Transcriptor.Py.Wrapper.Configurations;
+using Transcriptor.Py.Wrapper.Models;
 
 namespace Transcriptor.Py.Wrapper.Implementation;
 
@@ -10,7 +11,7 @@ public class TranscriptionServerManager(
     TranscriptionManagerOptions options)
     : ITranscriptionServerManager
 {
-    public async Task<string> StartInstanceAsync(
+    public async Task<AsrInstanceInfo> StartInstanceAsync(
         int port,
         string tag = "latest",
         CancellationToken cancellationToken = default)
@@ -50,7 +51,7 @@ public class TranscriptionServerManager(
         {
             if (container.State == "running")
             {
-                return container.ID;
+                return new AsrInstanceInfo(container.ID, new UriBuilder(uri) { Port = port }.Uri);
             }
 
             var canStart = await client.Containers.StartContainerAsync(
@@ -62,7 +63,7 @@ public class TranscriptionServerManager(
                 throw new Exception($"Unable to start container {container.ID} normally.");
             }
 
-            return container.ID;
+            return new AsrInstanceInfo(container.ID, new UriBuilder(uri) { Port = port }.Uri);
         }
 
         const string containerPort = "9090/tcp";
@@ -91,6 +92,22 @@ public class TranscriptionServerManager(
             HostConfig = new HostConfig
             {
                 PortBindings = portBindings,
+                Runtime = tag switch
+                {
+                    "gpu" => "nvidia",
+                    _ => null,
+                },
+                Devices = tag == "gpu"
+                    ?
+                    [
+                        new DeviceMapping
+                        {
+                            PathOnHost = "/dev/nvidia0",
+                            PathInContainer = "/dev/nvidia0",
+                            CgroupPermissions = "rwm",
+                        }
+                    ]
+                    : Array.Empty<DeviceMapping>(),
             }
         }, cancellationToken);
 
@@ -102,7 +119,7 @@ public class TranscriptionServerManager(
             throw new Exception($"Unable to start container {response.ID} normally.");
         }
 
-        return response.ID;
+        return new AsrInstanceInfo(response.ID, new UriBuilder(uri) { Port = port }.Uri);
     }
 
     public async Task StopInstanceAsync(string id, CancellationToken cancellationToken = default)

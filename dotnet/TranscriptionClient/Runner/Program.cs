@@ -20,20 +20,20 @@ class Program
             "/home/deszolate/Documents/WhisperLive/images");
         var manager = new TranscriptionServerManager(dockerClient, managerOptions);
 
-        var id1 = await manager.StartInstanceAsync(9999, "gpu");
-        var id2 = await manager.StartInstanceAsync(10000, "gpu");
-        var id3 = await manager.StartInstanceAsync(10001, "gpu");
+        // var id1 = await manager.StartInstanceAsync(9999, "gpu");
+        // var id2 = await manager.StartInstanceAsync(10000, "gpu");
+        // var id3 = await manager.StartInstanceAsync(10001, "gpu");
+        //
+        // await Task.Delay(3000);
+        //
+        // await manager.StopInstanceAsync(id1.Id);
+        // await manager.StopInstanceAsync(id2.Id);
+        // await manager.StopInstanceAsync(id3.Id);
 
-        await Task.Delay(3000);
-
-        await manager.StopInstanceAsync(id1);
-        await manager.StopInstanceAsync(id2);
-        await manager.StopInstanceAsync(id3);
-
-        return;
+        // return;
 
         // var serviceUri = new Uri("ws://192.168.20.98:9090");
-        using var transcriptor = new WhisperTranscriptor(serviceUri);
+        using var transcriptor = new WhisperTranscriptor(manager);
 
         var historyFilter = new HistoryMaintainerFilter();
 
@@ -48,7 +48,7 @@ class Program
             language: "en",
             forcedAudioChannels: 1,
             isMultiLanguage: false,
-            useVoiceActivityDetection: false,
+            useVoiceActivityDetection: true,
             transcriptionDelay: TimeSpan.FromMilliseconds(100),
             transcriptionTimeout: TimeSpan.FromSeconds(30),
             segmentFilter: filterPipeline);
@@ -65,7 +65,7 @@ class Program
             Console.WriteLine("-------------------------------------");
 
             var joinedText = string.Join(" ", segments.Select(s => s.Text));
-            Console.WriteLine(joinedText);
+            Console.WriteLine($"{speaker}: {joinedText}");
 
             return Task.CompletedTask;
         };
@@ -79,13 +79,10 @@ class Program
             return Task.CompletedTask;
         };
 
-        var filePath = "/home/deszolate/Downloads/yesterday.mp4";
+        var filePath = "/home/deszolate/Downloads/we_can_work_it_out.aac";
         // await using var stream = WaveFileReader.OpenRead(filePath);
 
-        using var session = await transcriptor.TranscribeAsync(filePath, options with
-        {
-            NumberOfSpeaker = 1,
-        }, CancellationToken.None);
+        using var session = await transcriptor.TranscribeAsync(filePath, options, CancellationToken.None);
 
         Console.WriteLine("Press enter key to stop");
         Console.ReadLine();

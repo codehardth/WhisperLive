@@ -25,7 +25,6 @@ public class WhisperTranscriptor : ITranscriptor
     private readonly SemaphoreSlim semaphore = new(1, 1);
     private readonly Dictionary<Guid, CancellationTokenSource?> pendingCancellationTokenSources = new();
 
-    private WebSocket? _socket;
     private bool _disposed;
     private DateTimeOffset _lastResponseReceived = DateTimeOffset.UtcNow;
 
@@ -72,6 +71,7 @@ public class WhisperTranscriptor : ITranscriptor
         var session = await TranscribeAsync(
             buffer,
             options,
+            analysis,
             cancellationToken);
 
         return session;
@@ -108,7 +108,7 @@ public class WhisperTranscriptor : ITranscriptor
         {
             const int chunkSize = 4096;
 
-            var buffer = new byte[chunkSize * options.NumberOfSpeaker * 2]; // 2 bytes per sample
+            var buffer = new byte[chunkSize * numberOfChannels * 2]; // 2 bytes per sample
             while (!ct.IsCancellationRequested)
             {
                 var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
@@ -132,22 +132,55 @@ public class WhisperTranscriptor : ITranscriptor
     {
         await this.semaphore.WaitAsync(cancellationToken);
 
-        var serverReady = false;
+        CancellationTokenSource? cts = default;
+        CancellationToken ct = cancellationToken;
+
+        if (cancellationToken == CancellationToken.None)
+        {
+            cts = new CancellationTokenSource();
+            ct = cts.Token;
+        }
 
         if (this._serviceUri is { } uri)
         {
-            this._socket = new WebSocket(uri.AbsoluteUri);
+            OpenWebSocketConnection(uri, sessionId, "Channel 1", streamingTask, options, ct);
         }
         else if (this._serverManager is { } manager)
         {
-            throw new NotImplementedException();
+            const int defaultPort = 9090;
+
+            for (var channel = 1; channel <= audioChannelCount; channel++)
+            {
+                var port = defaultPort + channel - 1;
+                var res = await manager.StartInstanceAsync(port, "gpu", cancellationToken);
+
+                // Delay a little to give a chance for the server to complete its cold start
+                await Task.Delay(5000, ct);
+                OpenWebSocketConnection(res.Endpoint, sessionId, $"Channel {channel}", streamingTask, options, ct);
+            }
         }
         else
         {
             throw new NotSupportedException();
         }
 
-        this._socket.OnMessage += (sender, args) =>
+        this.pendingCancellationTokenSources.Add(sessionId, cts);
+
+        this.semaphore.Release();
+    }
+
+    private WebSocket OpenWebSocketConnection(
+        Uri endpoint,
+        Guid sessionId,
+        string label,
+        Func<CancellationToken, IAsyncEnumerable<byte[]>> streamingTask,
+        WhisperTranscriptorOptions options,
+        CancellationToken ct)
+    {
+        var serverReady = false;
+        var socket = new WebSocket(endpoint.AbsoluteUri);
+
+        socket.OnMessage += (sender, args) =>
         {
             this._lastResponseReceived = DateTimeOffset.UtcNow;
 
@@ -171,7 +204,7 @@ public class WhisperTranscriptor : ITranscriptor
             {
                 var hasSpeaker = payload.RootElement.TryGetProperty("speaker", out var speakerElement);
                 var segments = segmentsJsonElement.Deserialize<Segment[]>(_serializerOptions)!;
-                var speaker = hasSpeaker ? speakerElement.GetString() : default;
+                var speaker = hasSpeaker ? speakerElement.GetString() : label;
 
                 if (options.SegmentFilter is { } filter)
                 {
@@ -188,22 +221,13 @@ public class WhisperTranscriptor : ITranscriptor
                 }
             }
         };
-        this._socket.Connect();
-
-        CancellationTokenSource? cts = default;
-        CancellationToken ct = cancellationToken;
-
-        if (cancellationToken == CancellationToken.None)
-        {
-            cts = new CancellationTokenSource();
-            ct = cts.Token;
-        }
+        socket.Connect();
 
         _ = Task.Run(async () =>
         {
             try
             {
-                this._socket.Send(JsonSerializer.Serialize(new
+                socket.Send(JsonSerializer.Serialize(new
                 {
                     uid = sessionId,
                     language = options.Language,
@@ -211,7 +235,7 @@ public class WhisperTranscriptor : ITranscriptor
                     model = options.Model,
                     use_vad = options.UseVoiceActivityDetection,
                     type = options.ModelType.ToString(),
-                    channel = audioChannelCount,
+                    channel = 1,
                     multilingual = options.IsMultiLanguage,
                 }));
 
@@ -222,7 +246,7 @@ public class WhisperTranscriptor : ITranscriptor
 
                 await foreach (var buffer in streamingTask(ct))
                 {
-                    if (!this._socket.IsAlive)
+                    if (!socket.IsAlive)
                     {
                         this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.ServerDisconnected);
                         break;
@@ -231,7 +255,7 @@ public class WhisperTranscriptor : ITranscriptor
                     await Task.Delay(options.TranscriptionDelay, ct);
 
                     var data = BytesToFloatArray(buffer).ToByteArray();
-                    this._socket.Send(data);
+                    socket.Send(data);
                 }
 
                 while (!ct.IsCancellationRequested &&
@@ -241,28 +265,19 @@ public class WhisperTranscriptor : ITranscriptor
                     await Task.Delay(1000, ct);
                 }
 
-                this._socket.Send("END_OF_AUDIO"u8.ToArray());
-
-                this._socket.Close(CloseStatusCode.Normal);
+                socket.Send("END_OF_AUDIO"u8.ToArray());
+                socket.Close(CloseStatusCode.Normal);
 
                 this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.Completed);
             }
             catch (TaskCanceledException)
             {
-                this._socket.Close(CloseStatusCode.Normal);
-
-                if (this.pendingCancellationTokenSources.Remove(sessionId, out var t))
-                {
-                    t?.Dispose();
-                }
-
+                socket.Close(CloseStatusCode.Normal);
                 this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.Error);
             }
         }, ct);
 
-        this.pendingCancellationTokenSources.Add(sessionId, cts);
-
-        this.semaphore.Release();
+        return socket;
     }
 
     public async Task StopAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -303,9 +318,9 @@ public class WhisperTranscriptor : ITranscriptor
             return;
         }
 
-        foreach (var session in this.pendingCancellationTokenSources)
+        foreach (var session in this.pendingCancellationTokenSources.Select(s => s.Value))
         {
-            session.Value?.Cancel();
+            session?.Cancel();
         }
 
         this._disposed = true;
@@ -316,27 +331,5 @@ public class WhisperTranscriptor : ITranscriptor
         this.Dispose(true);
 
         GC.SuppressFinalize(this);
-    }
-
-    public IDisposable Subscribe(IObserver<TranscriptResult> observer)
-    {
-        this.MessageArrived += (id, speaker, segments) =>
-        {
-            observer.OnNext(new TranscriptResult(
-                id,
-                speaker,
-                segments.Select(s => new TranscriptMessage(s.Start, s.End, s.Text))));
-
-            return Task.CompletedTask;
-        };
-
-        this.SessionEnded += (_, _) =>
-        {
-            observer.OnCompleted();
-
-            return Task.CompletedTask;
-        };
-
-        return System.Reactive.Disposables.Disposable.Empty;
     }
 }

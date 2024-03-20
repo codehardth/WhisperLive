@@ -18,7 +18,7 @@ public enum TranscriptionSessionEndedReason
 
 public delegate Task TranscriptionSessionEndedHandler(Guid sessionId, TranscriptionSessionEndedReason reason);
 
-public interface ITranscriptor : IObservable<TranscriptResult>, IDisposable
+public interface ITranscriptor : IDisposable
 {
     Task<TranscriptionSession> TranscribeAsync(
         Uri uri,

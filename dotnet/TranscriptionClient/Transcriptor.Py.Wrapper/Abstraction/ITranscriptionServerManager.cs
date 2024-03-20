@@ -1,8 +1,10 @@
+using Transcriptor.Py.Wrapper.Models;
+
 namespace Transcriptor.Py.Wrapper.Abstraction;
 
 public interface ITranscriptionServerManager
 {
-    Task<string> StartInstanceAsync(int port, string tag = "latest", CancellationToken cancellationToken = default);
+    Task<AsrInstanceInfo> StartInstanceAsync(int port, string tag = "latest", CancellationToken cancellationToken = default);
 
     Task StopInstanceAsync(string id, CancellationToken cancellationToken = default);
 
