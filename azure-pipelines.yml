@@ -51,18 +51,39 @@ stages:
             displayName: 'Install Mono'
           - task: NuGetAuthenticate@1
             displayName: 'NuGet Authenticate'
+
           - task: DotNetCoreCLI@2
-            displayName: 'Pack Transcriptor.Py.Wrapper NuGet package'
+            displayName: 'Pack WhisperLive.Abstraction NuGet package'
             inputs:
               command: 'pack'
               configuration: $(BuildConfiguration)
-              packagesToPack: '$(Build.SourcesDirectory)/dotnet/TranscriptionClient/Transcriptor.Py.Wrapper/Transcriptor.Py.Wrapper.csproj'
+              packagesToPack: '$(Build.SourcesDirectory)/dotnet/TranscriptionClient/WhisperLive.Abstraction/WhisperLive.Abstraction.csproj'
+              packDestination: '$(Build.ArtifactStagingDirectory)'
+              versioningScheme: byEnvVar
+              versionEnvVar: tag
+              verbosityPack: 'Normal'
+          - task: DotNetCoreCLI@2
+            displayName: 'Pack WhisperLive.Client NuGet package'
+            inputs:
+              command: 'pack'
+              configuration: $(BuildConfiguration)
+              packagesToPack: '$(Build.SourcesDirectory)/dotnet/TranscriptionClient/WhisperLive.Client/WhisperLive.Client.csproj'
+              packDestination: '$(Build.ArtifactStagingDirectory)'
+              versioningScheme: byEnvVar
+              versionEnvVar: tag
+              verbosityPack: 'Normal'
+          - task: DotNetCoreCLI@2
+            displayName: 'Pack WhisperLive.Client.Recorder NuGet package'
+            inputs:
+              command: 'pack'
+              configuration: $(BuildConfiguration)
+              packagesToPack: '$(Build.SourcesDirectory)/dotnet/TranscriptionClient/WhisperLive.Client.Recorder/WhisperLive.Client.Recorder.csproj'
               packDestination: '$(Build.ArtifactStagingDirectory)'
               versioningScheme: byEnvVar
               versionEnvVar: tag
               verbosityPack: 'Normal'
           - task: NuGetCommand@2
-            displayName: 'Publish Transcriptor.Py.Wrapper NuGet package'
+            displayName: 'Publish NuGet packages'
             inputs:
               command: 'push'
               packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'

@@ -2,10 +2,9 @@ using DemoApi.Handlers;
 using Hangfire;
 using Hangfire.MemoryStorage;
 using MediatR;
-using Transcriptor.Py.Wrapper.Abstraction;
-using Transcriptor.Py.Wrapper.Configurations;
-using Transcriptor.Py.Wrapper.Enums;
-using Transcriptor.Py.Wrapper.Implementation;
+using WhisperLive.Client.Abstraction;
+using WhisperLive.Client.Configurations;
+using WhisperLive.Client.Implementation;
 
 var builder = WebApplication.CreateBuilder(args);
 

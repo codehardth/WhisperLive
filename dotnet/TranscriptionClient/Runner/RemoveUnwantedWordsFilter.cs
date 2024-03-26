@@ -1,5 +1,5 @@
-using Transcriptor.Py.Wrapper.Abstraction;
-using Transcriptor.Py.Wrapper.Models;
+using WhisperLive.Abstraction;
+using WhisperLive.Abstraction.Models;
 
 namespace Runner;
 
@@ -13,6 +13,7 @@ public class RemoveUnwantedWordsFilter : ISegmentFilter
         "บริษัท B-TECH",
         "บริษัท C-TECH",
         "🎵",
+        "!",
     };
 
     public IEnumerable<Segment> Filter(IEnumerable<Segment> segments)

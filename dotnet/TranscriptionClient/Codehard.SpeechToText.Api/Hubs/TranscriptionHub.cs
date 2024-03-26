@@ -1,11 +1,8 @@
-using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
 using Codehard.SpeechToText.Api.Abstractions;
 using Microsoft.AspNetCore.SignalR;
-using Transcriptor.Py.Wrapper.Abstraction;
-using Transcriptor.Py.Wrapper.Configurations;
-using Transcriptor.Py.Wrapper.Enums;
-using Transcriptor.Py.Wrapper.Implementation;
+using WhisperLive.Abstraction;
+using WhisperLive.Abstraction.Configurations;
 
 namespace Codehard.SpeechToText.Api.Hubs;
 
@@ -41,18 +38,7 @@ public class TranscriptionHub : Hub, IDiscoverableHub
             new WhisperTranscriptorOptions(modelSize, language, multiLang, TimeSpan.FromMilliseconds(100));
         using var session = await this._transcriptor.TranscribeAsync(fileInfo.FullName, options, cancellationToken);
 
-        foreach (var result in this._transcriptor.Distinct())
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-
-            foreach (var message in result.Messages)
-            {
-                yield return message.Text;
-            }
-        }
+        yield return string.Empty;
 
         await this._transcriptor.StopAsync(session.Id, CancellationToken.None);
     }
@@ -69,18 +55,7 @@ public class TranscriptionHub : Hub, IDiscoverableHub
             new WhisperTranscriptorOptions(modelSize, language, multiLang, TimeSpan.FromMilliseconds(100));
         using var session = await this._transcriptor.TranscribeAsync(uri, options, cancellationToken);
 
-        foreach (var result in this._transcriptor.Distinct())
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-
-            foreach (var message in result.Messages)
-            {
-                yield return message.Text;
-            }
-        }
+        yield return string.Empty;
 
         await this._transcriptor.StopAsync(session.Id, CancellationToken.None);
     }

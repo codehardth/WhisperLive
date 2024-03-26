@@ -23,7 +23,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Transcriptor.Py.Wrapper\Transcriptor.Py.Wrapper.csproj" />
+      <ProjectReference Include="..\WhisperLive.Client\WhisperLive.Client.csproj" />
     </ItemGroup>
 
 </Project>

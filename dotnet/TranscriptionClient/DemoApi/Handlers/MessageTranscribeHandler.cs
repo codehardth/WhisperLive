@@ -4,9 +4,8 @@ using System.Reactive.Threading.Tasks;
 using DemoApi.Extensions;
 using Hangfire;
 using MediatR;
-using Transcriptor.Py.Wrapper.Abstraction;
-using Transcriptor.Py.Wrapper.Configurations;
-using Transcriptor.Py.Wrapper.Implementation;
+using WhisperLive.Client.Abstraction;
+using WhisperLive.Client.Configurations;
 
 namespace DemoApi.Handlers;
 

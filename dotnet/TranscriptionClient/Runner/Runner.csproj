@@ -19,8 +19,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Transcriptor.Py.Wrapper\Transcriptor.Py.Wrapper.csproj"/>
+        <ProjectReference Include="..\WhisperLive.Client.Recorder\WhisperLive.Client.Recorder.csproj" />
+        <ProjectReference Include="..\WhisperLive.Client\WhisperLive.Client.csproj" />
         <ProjectReference Include="..\Transcriptor\Transcriptor.csproj"/>
+        <ProjectReference Include="..\WhisperLive.Coordinator.Docker\WhisperLive.Coordinator.Docker.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Reference Include="Docker.DotNet">
+        <HintPath>..\..\..\..\..\.nuget\packages\docker.dotnet\3.125.15\lib\netstandard2.1\Docker.DotNet.dll</HintPath>
+      </Reference>
     </ItemGroup>
 
 </Project>

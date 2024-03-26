@@ -1,7 +1,7 @@
 using Codehard.SpeechToText.Api;
 using Codehard.SpeechToText.Api.Hubs;
-using Transcriptor.Py.Wrapper.Abstraction;
-using Transcriptor.Py.Wrapper.Implementation;
+using WhisperLive.Abstraction;
+using WhisperLive.Client.Implementation;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,7 +16,7 @@ builder.Services.AddLogging(c => c.AddConsole());
 
 builder.Services.AddScoped<FileStorage>();
 builder.Services.AddScoped<ITranscriptor>(
-    static _ => new WhisperTranscriptor(new Uri("ws://localhost:8765")));
+    static _ => new SingleChannelTranscriptor(new Uri("ws://localhost:8765")));
 
 var app = builder.Build();
 

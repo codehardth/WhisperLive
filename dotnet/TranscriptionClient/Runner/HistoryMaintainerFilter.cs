@@ -1,5 +1,5 @@
-using Transcriptor.Py.Wrapper.Abstraction;
-using Transcriptor.Py.Wrapper.Models;
+using WhisperLive.Abstraction;
+using WhisperLive.Abstraction.Models;
 
 namespace Runner;
 

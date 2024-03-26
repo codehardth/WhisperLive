@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Transcriptor.Py.Wrapper.Abstraction;
+using WhisperLive.Abstraction;
 
 namespace Codehard.SpeechToText.Api.Controllers;
 

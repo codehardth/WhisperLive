@@ -1,10 +1,6 @@
 @page "/asr"
-
-@using Transcriptor.Py.Wrapper.Implementation
-@using Transcriptor.Py.Wrapper.Enums
-@using System.Reactive.Linq
-@using System.Diagnostics
-@using Transcriptor.Py.Wrapper.Configurations
+@using WhisperLive.Client.Implementation
+@using WhisperLive.Abstraction.Configurations
 
 @implements IDisposable
 
@@ -73,102 +69,76 @@
             return;
         }
 
-        var serviceUri = new Uri("ws://192.168.20.98:8765");
-        transcriptor = new WhisperTranscriptor(serviceUri);
+        var serviceUri = new Uri("ws://192.168.20.118:9091");
+        transcriptor = new SingleChannelTranscriptor(serviceUri);
+        var filterPipeline = new SegmentFilterFilterPipeline();
+        filterPipeline.AddFilter<LastSegmentPerStartTimeFilter>();
 
         var options =
             new WhisperTranscriptorOptions(
                 model: "CodeHardThailand/whisper-th-medium-combined-ct2",
                 language: "th",
                 isMultiLanguage: false,
-                transcriptionDelay: TimeSpan.FromMilliseconds(100));
+                useVoiceActivityDetection: false,
+                transcriptionDelay: TimeSpan.FromMilliseconds(100),
+                transcriptionTimeout: TimeSpan.FromSeconds(60),
+                segmentFilter: filterPipeline);
         var url = new Uri("https://tv-live.tpchannel.org/live/tv.m3u8");
 
         await transcriptor.TranscribeAsync(url, options);
 
-        double latestStartTime = 0;
-        string latestDialog = "";
+        transcriptor.MessageArrived += async (id, speaker, segments) =>
+        {
+            speaker ??= "Default Speaker";
 
-        transcriptor
-            .Where(m => m.Messages.Any())
-            .Subscribe(
-                result =>
+            foreach (var segment in segments)
+            {
+                var transcriptionMessage = new TranscriptMessage
                 {
-                    var messages = result.Messages.Where(m => m.Text != "โปรดติดตามตอนต่อไป");
-                    var distinctMessages =
-                        messages
-                            .GroupBy(m => (result.Speaker, m.Start))
-                            .Select(g => g.Last());
+                    Start = segment.Start,
+                    End = segment.End,
+                    Length = segment.End - segment.Start,
+                    Speaker = $"{segment.Start}-{segment.End} {speaker} : ",
+                    Message = segment.Text
+                };
 
-                    foreach (var msg in distinctMessages)
+                if (!transcriptMessagesDict.TryGetValue(speaker, out var targetList))
+                {
+                    targetList = new SortedList<double, TranscriptMessage>();
+                    transcriptMessagesDict.Add(speaker, targetList);
+                }
+
+                if (!targetList.Any())
+                {
+                    targetList.Add(segment.Start, transcriptionMessage);
+                }
+                else
+                {
+                    var messageIndex = targetList.IndexOfKey(segment.Start);
+
+                    // Not found
+                    if (messageIndex < 0)
                     {
-                        rawTranscriptMessages.Add(
-                            new TranscriptMessage
-                            {
-                                Start = msg.Start,
-                                Length = msg.End - msg.Start,
-                                Speaker = $"{msg.Start}-{msg.End} {result.Speaker} : ",
-                                Message = msg.Text
-                            });
-
-                        var transcriptionMessage = new TranscriptMessage
-                        {
-                            Start = msg.Start,
-                            End = msg.End,
-                            Length = msg.End - msg.Start,
-                            Speaker = $"{msg.Start}-{msg.End} {result.Speaker} : ",
-                            Message = msg.Text
-                        };
-
-                        if (!transcriptMessagesDict.TryGetValue(result.Speaker, out var targetList))
-                        {
-                            targetList = new SortedList<double, TranscriptMessage>();
-                            transcriptMessagesDict.Add(result.Speaker, targetList);
-                        }
-
-                        if (!targetList.Any())
-                        {
-                            targetList.Add(msg.Start, transcriptionMessage);
-                        }
-                        else
-                        {
-                            var messageIndex = targetList.IndexOfKey(msg.Start);
-
-                            // Not found
-                            if (messageIndex < 0)
-                            {
-                                targetList.Add(msg.Start, transcriptionMessage);
-                            }
-                            else
-                            {
-                                var current = targetList[msg.Start];
-
-                                if (current.End < msg.End)
-                                {
-                                    targetList[msg.Start] = transcriptionMessage;
-                                }
-                            }
-                        }
-
-                        InvokeAsync(StateHasChanged);
-
-                        JSRuntime.InvokeVoidAsync("scrollToBottom", "chat-box");
-
-                        latestDialog = msg.Text;
+                        targetList.Add(segment.Start, transcriptionMessage);
                     }
-                });
+                    else
+                    {
+                        var current = targetList[segment.Start];
+
+                        if (current.End < segment.End)
+                        {
+                            targetList[segment.Start] = transcriptionMessage;
+                        }
+                    }
+                }
+
+                await InvokeAsync(StateHasChanged);
+
+                await JSRuntime.InvokeVoidAsync("scrollToBottom", "chat-box");
+            }
+        };
 
         RecordButtonText = "Stop";
-    }
-
-    private string SkipDuplicateCharacters(string text, string latestDialog)
-    {
-        return
-            new string(
-                text.Zip(latestDialog)
-                    .SkipWhile(tuple => tuple.First == tuple.Second)
-                    .Select(tuple => tuple.First)
-                    .ToArray());
     }
 
     private void Clear()
