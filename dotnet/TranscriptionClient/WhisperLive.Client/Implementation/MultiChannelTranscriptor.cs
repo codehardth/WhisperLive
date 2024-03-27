@@ -26,7 +26,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
         var sessionId = Guid.NewGuid();
 
         await InternalTranscribeAsync(
-            PcmReader.FromHlsAsync(uri, numberOfChannel, cancellationToken),
+            ct => PcmReader.FromHlsAsync(uri, numberOfChannel, ct),
             sessionId,
             numberOfChannel,
             options,

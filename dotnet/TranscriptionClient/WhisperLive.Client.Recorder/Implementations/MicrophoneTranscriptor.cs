@@ -34,7 +34,7 @@ public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTran
         var sessionId = Guid.NewGuid();
 
         await InternalTranscribeAsync(
-            ReadFromMicrophoneAsync(device, options, cancellationToken),
+            ct => ReadFromMicrophoneAsync(device, options, ct),
             sessionId,
             1,
             options,
@@ -76,14 +76,19 @@ public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTran
 
         stream.Start();
 
-        while (await reader.WaitToReadAsync(cancellationToken))
+        try
         {
-            var buffer = await reader.ReadAsync(cancellationToken);
+            while (await reader.WaitToReadAsync(cancellationToken))
+            {
+                var buffer = await reader.ReadAsync(cancellationToken);
 
-            yield return buffer;
+                yield return buffer;
+            }
         }
-
-        stream.Stop();
+        finally
+        {
+            stream.Stop();
+        }
 
         StreamCallbackResult Callback(
             IntPtr input,
@@ -93,7 +98,7 @@ public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTran
             StreamCallbackFlags statusFlags,
             IntPtr userData)
         {
-            if (frameCount == 0)
+            if (frameCount == 0 || cancellationToken.IsCancellationRequested)
             {
                 writer.Complete();
 

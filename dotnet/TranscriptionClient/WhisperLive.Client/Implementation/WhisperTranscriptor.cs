@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WebSocketSharp;
@@ -55,7 +56,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
         var sessionId = Guid.NewGuid();
 
         await InternalTranscribeAsync(
-            IterateStreamAsync(),
+            IterateStreamAsync,
             sessionId,
             audioChannelCount,
             options,
@@ -63,15 +64,15 @@ public abstract class WhisperTranscriptor : ITranscriptor
 
         return new TranscriptionSession(sessionId, stream);
 
-        async IAsyncEnumerable<byte[]> IterateStreamAsync()
+        async IAsyncEnumerable<byte[]> IterateStreamAsync([EnumeratorCancellation] CancellationToken ct)
         {
             const int chunkSize = 4096;
 
             var buffer = new byte[chunkSize * audioChannelCount * 2]; // 2 bytes per sample
-            while (!cancellationToken.IsCancellationRequested)
+            while (!ct.IsCancellationRequested)
             {
                 Array.Clear(buffer);
-                var bytesRead = await stream.ReadAsync(buffer, cancellationToken);
+                var bytesRead = await stream.ReadAsync(buffer, ct);
 
                 if (bytesRead == 0)
                 {
@@ -84,7 +85,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
     }
 
     protected async Task InternalTranscribeAsync(
-        IAsyncEnumerable<byte[]> stream,
+        Func<CancellationToken, IAsyncEnumerable<byte[]>> streamFunc,
         Guid sessionId,
         int audioChannelCount,
         WhisperTranscriptorOptions options,
@@ -101,7 +102,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
             ct = cts.Token;
         }
 
-        await ProcessStreamAsync(stream, sessionId, audioChannelCount, options, cancellationToken);
+        await ProcessStreamAsync(streamFunc(ct), sessionId, audioChannelCount, options, ct);
 
         this.pendingCancellationTokenSources.Add(sessionId, cts);
         this.semaphore.Release();
@@ -236,18 +237,30 @@ public abstract class WhisperTranscriptor : ITranscriptor
                    DateTimeOffset.UtcNow.Subtract(lastResponseReceived).TotalSeconds <
                    options.TranscriptionTimeout.Seconds)
             {
-                await Task.Delay(1000, ct);
+                await Task.Delay(100, ct);
             }
 
             socket.Send("END_OF_AUDIO"u8.ToArray());
             socket.Close(CloseStatusCode.Normal);
-
             this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.Completed);
         }
-        catch (TaskCanceledException)
+        catch (Exception ex)
         {
+            socket.Send("END_OF_AUDIO"u8.ToArray());
             socket.Close(CloseStatusCode.Normal);
-            this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.Error);
+            var status =
+                ex switch
+                {
+                    OperationCanceledException or TaskCanceledException
+                        => TranscriptionSessionEndedReason.Completed,
+                    _ => TranscriptionSessionEndedReason.Error,
+                };
+
+            this.SessionEnded?.Invoke(sessionId, status);
+        }
+        finally
+        {
+            await this.StopAsync(sessionId, ct);
         }
     }
 

@@ -15,7 +15,7 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
         var sessionId = Guid.NewGuid();
 
         await InternalTranscribeAsync(
-            PcmReader.FromHlsAsync(uri, 1, cancellationToken),
+            ct => PcmReader.FromHlsAsync(uri, 1, ct),
             sessionId,
             1,
             options,
@@ -34,7 +34,7 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
         var session = await TranscribeAsync(
             buffer,
             options,
-            default,
+            1,
             cancellationToken);
 
         return session;
