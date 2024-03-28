@@ -1,7 +1,7 @@
 using WhisperLive.Abstraction;
 using WhisperLive.Abstraction.Models;
 
-namespace WhisperLive.Client.Implementation;
+namespace WhisperLive.Client.Filters;
 
 /// <summary>
 /// Represents a segment pipeline which applies a series of segment filters to segments.

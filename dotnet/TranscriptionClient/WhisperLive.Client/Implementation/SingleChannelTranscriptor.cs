@@ -7,7 +7,7 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
 {
     protected readonly Uri ServiceUri = serviceUri;
 
-    public override async Task<TranscriptionSession> TranscribeAsync(
+    public override async Task<TranscriptionSession> StartAsync(
         Uri uri,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
@@ -24,7 +24,7 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
         return new TranscriptionSession(sessionId, default);
     }
 
-    public override async Task<TranscriptionSession> TranscribeAsync(
+    public override async Task<TranscriptionSession> StartAsync(
         string filePath,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)

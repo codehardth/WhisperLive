@@ -7,6 +7,8 @@ public class RemoveUnwantedWordsFilter : ISegmentFilter
 {
     private readonly IReadOnlyCollection<string> unwatedWords = new[]
     {
+        "See you next week",
+        "Thanks for watching",
         "Thank you for watching",
         "โปรดติดตามตอนต่อไป",
         "บริษัท A-TECH",

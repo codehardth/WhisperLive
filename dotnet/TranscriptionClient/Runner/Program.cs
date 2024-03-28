@@ -1,6 +1,7 @@
 ﻿using Docker.DotNet;
 using WhisperLive.Abstraction;
 using WhisperLive.Abstraction.Configurations;
+using WhisperLive.Client.Filters;
 using WhisperLive.Client.Implementation;
 using WhisperLive.Client.Recorder.Implementations;
 using WhisperLive.Coordinator.Docker;
@@ -12,7 +13,7 @@ class Program
 {
     public static async Task Main(string[] args)
     {
-        var baseUri = "192.168.20.118";
+        var baseUri = "192.168.1.59";
         var serviceUri = new Uri($"ws://{baseUri}:9090");
 
         using var dockerClient =
@@ -22,7 +23,7 @@ class Program
             "0.0.0.0",
             "/home/deszolate/Documents/WhisperLive/images");
         var manager = new TranscriptionServerManager(dockerClient, managerOptions);
-        var coordinator = new CustomCoordinator();
+        var coordinator = new SingleServerCoordinator(serviceUri);
 
         //
         // var res1 = await manager.StartInstanceAsync(45000, "gpu");
@@ -43,15 +44,15 @@ class Program
 
         ISegmentFilterPipeline filterFilterPipeline = new SegmentFilterFilterPipeline();
         // filterPipeline.AddFilter(historyFilter);
-        // filterPipeline.AddFilter<RemoveUnwantedWordsFilter>();
-        // filterFilterPipeline.AddFilter<LastSegmentPerStartTimeFilter>();
+        filterFilterPipeline.AddFilter<RemoveUnwantedWordsFilter>();
+        filterFilterPipeline.AddFilter(new LastSegmentPerStartTimeFilter(3));
 
         var options = new WhisperTranscriptorOptions(
             model: "CodeHardThailand/whisper-th-medium-combined-ct2",
-            language: "th",
+            language: "en",
             isMultiLanguage: false,
-            useVoiceActivityDetection: false,
-            transcriptionDelay: TimeSpan.FromMilliseconds(10),
+            useVoiceActivityDetection: true,
+            transcriptionDelay: TimeSpan.FromMilliseconds(100),
             transcriptionTimeout: TimeSpan.FromSeconds(30),
             segmentFilter: filterFilterPipeline);
         var url = new Uri("https://livestream.parliament.go.th/lives/playlist.m3u8");
@@ -81,8 +82,8 @@ class Program
         var filePath = "/home/deszolate/Downloads/we_can_work_it_out.aac";
 
         var recordDevices = transcriptor.GetCaptureDevices().ToList();
-        using var session = await transcriptor.TranscribeAsync(
-            recordDevices.First(d => d.Name == "default"),
+        using var session = await transcriptor.StartAsync(
+            recordDevices.First(d => d.Name == "Microphone (ATR2500x-USB Microphone)"),
             options,
             CancellationToken.None);
         // using var session = await transcriptor.TranscribeAsync(url, options, CancellationToken.None);
@@ -96,14 +97,9 @@ class Program
         Console.ReadLine();
 
         await transcriptor.StopAsync(session.Id, CancellationToken.None);
+
+        Console.WriteLine("Stopped, you may close the program now.");
+        await Task.Delay(-1, CancellationToken.None);
         // await transcriptor2.StopAsync(session2.Id, CancellationToken.None);
-    }
-
-    enum CaptureMode
-    {
-        Capture = 1,
-
-        // ReSharper disable once UnusedMember.Local
-        LoopbackCapture = 2
     }
 }

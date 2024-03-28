@@ -11,7 +11,7 @@ public class DockerEngineCoordinator : ITranscriptionServerCoordinator
         this.manager = manager;
     }
 
-    public async Task<Uri> GetTranscriptionServerEndpointAsync(
+    public async ValueTask<Uri> GetTranscriptionServerEndpointAsync(
         object flag,
         CancellationToken cancellationToken = default)
     {

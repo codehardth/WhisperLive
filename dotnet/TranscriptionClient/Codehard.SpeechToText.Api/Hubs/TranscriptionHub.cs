@@ -36,7 +36,7 @@ public class TranscriptionHub : Hub, IDiscoverableHub
 
         var options =
             new WhisperTranscriptorOptions(modelSize, language, multiLang, TimeSpan.FromMilliseconds(100));
-        using var session = await this._transcriptor.TranscribeAsync(fileInfo.FullName, options, cancellationToken);
+        using var session = await this._transcriptor.StartAsync(fileInfo.FullName, options, cancellationToken);
 
         yield return string.Empty;
 
@@ -53,7 +53,7 @@ public class TranscriptionHub : Hub, IDiscoverableHub
     {
         var options =
             new WhisperTranscriptorOptions(modelSize, language, multiLang, TimeSpan.FromMilliseconds(100));
-        using var session = await this._transcriptor.TranscribeAsync(uri, options, cancellationToken);
+        using var session = await this._transcriptor.StartAsync(uri, options, cancellationToken);
 
         yield return string.Empty;
 

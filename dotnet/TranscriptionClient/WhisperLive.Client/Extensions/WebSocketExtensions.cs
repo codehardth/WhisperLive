@@ -48,4 +48,13 @@ internal static class WebSocketExtensions
             }
         }
     }
+
+    public static void CloseConnection(this WebSocket socket)
+    {
+        if (socket.IsAlive)
+        {
+            socket.Send("END_OF_AUDIO"u8.ToArray());
+            socket.Close(CloseStatusCode.Normal);
+        }
+    }
 }

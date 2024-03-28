@@ -18,12 +18,12 @@ public delegate Task TranscriptionSessionEndedHandler(Guid sessionId, Transcript
 
 public interface ITranscriptor : IDisposable
 {
-    Task<TranscriptionSession> TranscribeAsync(
+    Task<TranscriptionSession> StartAsync(
         Uri uri,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default);
 
-    Task<TranscriptionSession> TranscribeAsync(
+    Task<TranscriptionSession> StartAsync(
         string filePath,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default);

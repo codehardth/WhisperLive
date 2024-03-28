@@ -1,6 +1,7 @@
 @page "/asr"
 @using WhisperLive.Client.Implementation
 @using WhisperLive.Abstraction.Configurations
+@using WhisperLive.Client.Filters
 
 @implements IDisposable
 
@@ -85,7 +86,7 @@
                 segmentFilter: filterPipeline);
         var url = new Uri("https://tv-live.tpchannel.org/live/tv.m3u8");
 
-        await transcriptor.TranscribeAsync(url, options);
+        await transcriptor.StartAsync(url, options);
 
         transcriptor.MessageArrived += async (id, speaker, segments) =>
         {

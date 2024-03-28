@@ -1,3 +1,4 @@
+using System.Buffers;
 using FFMpegCore;
 using NumSharp;
 using WebSocketSharp;
@@ -15,7 +16,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
 
     private int AudioChannelCount { get; set; }
 
-    public override async Task<TranscriptionSession> TranscribeAsync(
+    public override async Task<TranscriptionSession> StartAsync(
         Uri uri,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
@@ -35,7 +36,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
         return new TranscriptionSession(sessionId, default);
     }
 
-    public override async Task<TranscriptionSession> TranscribeAsync(
+    public override async Task<TranscriptionSession> StartAsync(
         string filePath,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
@@ -54,25 +55,53 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
         return session;
     }
 
-    protected override Task SendPacketToServerAsync(WebSocket webSocket, byte[] buffer)
+    public override async Task StopAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        foreach (var socket in this.sockets)
+        {
+            socket.CloseConnection();
+        }
+
+        await base.StopAsync(sessionId, cancellationToken);
+    }
+
+    protected override async Task SendPacketToServerAsync(WebSocket webSocket, byte[] buffer)
     {
         if (this.AudioChannelCount == 1)
         {
-            return base.SendPacketToServerAsync(webSocket, buffer);
+            await base.SendPacketToServerAsync(webSocket, buffer);
+
+            return;
         }
 
-        var decode = Decode(Numpy.bytes_to_float_array(buffer).ToByteArray(), this.AudioChannelCount);
+        var deinterleaveBuffers = DeinterleaveChannels(buffer, this.AudioChannelCount, 2);
 
         for (var channel = 0; channel < this.AudioChannelCount; channel++)
         {
-            var specificChannelBuffer = decode[Slice.All, channel];
-
             var socket = this.sockets.ElementAt(channel);
+            var bytes = deinterleaveBuffers.ElementAt(channel);
 
-            socket.Send(specificChannelBuffer.ToByteArray());
+            await base.SendPacketToServerAsync(socket, bytes);
         }
 
-        return Task.CompletedTask;
+        static IEnumerable<byte[]> DeinterleaveChannels(byte[] interleavedBuffer, int channelCount, int bytesPerSample)
+        {
+            var samplesPerChannel = interleavedBuffer.Length / (channelCount * bytesPerSample);
+            var bufferSize = samplesPerChannel * bytesPerSample;
+
+            var buffer = new byte[bufferSize];
+            for (var i = 0; i < channelCount; i++)
+            {
+                for (var j = 0; j < samplesPerChannel; j++)
+                {
+                    var srcOffset = (j * channelCount + i) * bytesPerSample;
+                    var destOffset = j * bytesPerSample;
+                    Buffer.BlockCopy(interleavedBuffer, srcOffset, buffer, destOffset, bytesPerSample);
+                }
+
+                yield return buffer;
+            }
+        }
     }
 
     protected override async Task ProcessStreamAsync(

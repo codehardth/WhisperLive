@@ -9,7 +9,7 @@ public interface IMicrophoneTranscriptor : ITranscriptor
 {
     IEnumerable<RecordDevice> GetCaptureDevices();
 
-    Task<TranscriptionSession> TranscribeAsync(
+    Task<TranscriptionSession> StartAsync(
         RecordDevice device,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default);

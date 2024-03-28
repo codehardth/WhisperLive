@@ -29,12 +29,12 @@ public abstract class WhisperTranscriptor : ITranscriptor
     {
     }
 
-    public abstract Task<TranscriptionSession> TranscribeAsync(
+    public abstract Task<TranscriptionSession> StartAsync(
         Uri uri,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default);
 
-    public abstract Task<TranscriptionSession> TranscribeAsync(
+    public abstract Task<TranscriptionSession> StartAsync(
         string filePath,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default);
@@ -141,7 +141,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
             ct);
     }
 
-    public async Task StopAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    public virtual async Task StopAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await this.semaphore.WaitAsync(CancellationToken.None);
 
@@ -240,14 +240,12 @@ public abstract class WhisperTranscriptor : ITranscriptor
                 await Task.Delay(100, ct);
             }
 
-            socket.Send("END_OF_AUDIO"u8.ToArray());
-            socket.Close(CloseStatusCode.Normal);
+            socket.CloseConnection();
             this.SessionEnded?.Invoke(sessionId, TranscriptionSessionEndedReason.Completed);
         }
         catch (Exception ex)
         {
-            socket.Send("END_OF_AUDIO"u8.ToArray());
-            socket.Close(CloseStatusCode.Normal);
+            socket.CloseConnection();
             var status =
                 ex switch
                 {

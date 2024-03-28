@@ -1,15 +1,22 @@
 using WhisperLive.Abstraction;
 using WhisperLive.Abstraction.Models;
 
-namespace WhisperLive.Client.Implementation;
+namespace WhisperLive.Client.Filters;
 
 /// <summary>
 /// Represents a segment filter that retains only segments with the same start time, keeping the last segment with that start time.
 /// </summary>
 public sealed class LastSegmentPerStartTimeFilter : ISegmentFilter
 {
+    private readonly int bufferThresholdSecond;
     private readonly SortedList<double, Segment> sortedMessages = new();
     private double lastSegmentTime = -1;
+    private DateTimeOffset lastSent = DateTimeOffset.MinValue;
+
+    public LastSegmentPerStartTimeFilter(int bufferThresholdSecond)
+    {
+        this.bufferThresholdSecond = bufferThresholdSecond;
+    }
 
     /// <summary>
     /// Retrieves the complete segments after applying the filter.
@@ -50,13 +57,16 @@ public sealed class LastSegmentPerStartTimeFilter : ISegmentFilter
         }
 
         var last = sortedMessages.Values.LastOrDefault();
+        var lastSentOverThreshold =
+            DateTimeOffset.UtcNow.Subtract(this.lastSent).TotalSeconds > this.bufferThresholdSecond;
 
-        if (last is null || last.Start.Equals(lastSegmentTime))
+        if (last is null || last.Start.Equals(lastSegmentTime) || !lastSentOverThreshold)
         {
             return Enumerable.Empty<Segment>();
         }
 
         lastSegmentTime = last.Start;
+        this.lastSent = DateTimeOffset.UtcNow;
 
         return sortedMessages.Values;
     }

@@ -1,7 +1,9 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using PortAudioSharp;
+using WhisperLive.Abstraction;
 using WhisperLive.Abstraction.Configurations;
 using WhisperLive.Abstraction.Models;
 using WhisperLive.Client.Implementation;
@@ -10,9 +12,15 @@ using WhisperLive.Client.Recorder.Models;
 
 namespace WhisperLive.Client.Recorder.Implementations;
 
-public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTranscriptor
+public class MicrophoneTranscriptor : MultiChannelTranscriptor, IMicrophoneTranscriptor
 {
-    public MicrophoneTranscriptor(Uri endpoint) : base(endpoint)
+    public MicrophoneTranscriptor(Uri endpoint)
+        : this(new SingleServerCoordinator(endpoint))
+    {
+    }
+
+    public MicrophoneTranscriptor(ITranscriptionServerCoordinator coordinator)
+        : base(coordinator)
     {
         PortAudio.Initialize();
     }
@@ -22,11 +30,14 @@ public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTran
         for (var i = 0; i != PortAudio.DeviceCount; ++i)
         {
             var deviceInfo = PortAudio.GetDeviceInfo(i);
-            yield return new RecordDevice(i, deviceInfo.name);
+            yield return new RecordDevice(i, deviceInfo.name, deviceInfo.maxInputChannels)
+            {
+                _deviceInfo = deviceInfo,
+            };
         }
     }
 
-    public async Task<TranscriptionSession> TranscribeAsync(
+    public async Task<TranscriptionSession> StartAsync(
         RecordDevice device,
         WhisperTranscriptorOptions options,
         CancellationToken cancellationToken = default)
@@ -36,7 +47,7 @@ public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTran
         await InternalTranscribeAsync(
             ct => ReadFromMicrophoneAsync(device, options, ct),
             sessionId,
-            1,
+            device._deviceInfo.maxInputChannels,
             options,
             cancellationToken);
 
@@ -45,24 +56,31 @@ public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTran
 
     private async IAsyncEnumerable<byte[]> ReadFromMicrophoneAsync(
         RecordDevice device,
-        WhisperTranscriptorOptions options,
+        WhisperTranscriptorOptions _,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         const int sampleRate = 16_000;
         const int bufferSize = 4096;
 
-        var deviceInfo = PortAudio.GetDeviceInfo(device.Index);
+        var deviceInfo = device._deviceInfo;
+        var inputChannels = deviceInfo.maxInputChannels;
 
-        var chan = Channel.CreateBounded<byte[]>(1);
+        // 2 bytes per sample per channel
+        var pool = ArrayPool<byte>.Create(
+            maxArrayLength: bufferSize * inputChannels * 2,
+            maxArraysPerBucket: 1);
+        var chan = Channel.CreateBounded<byte[]>(capacity: 1);
         var reader = chan.Reader;
         var writer = chan.Writer;
 
-        var param = new StreamParameters();
-        param.device = device.Index;
-        param.channelCount = 1;
-        param.sampleFormat = SampleFormat.Int16;
-        param.suggestedLatency = deviceInfo.defaultLowInputLatency;
-        param.hostApiSpecificStreamInfo = IntPtr.Zero;
+        var param = new StreamParameters
+        {
+            device = device.Index,
+            channelCount = inputChannels,
+            sampleFormat = SampleFormat.Int16,
+            suggestedLatency = deviceInfo.defaultLowInputLatency,
+            hostApiSpecificStreamInfo = IntPtr.Zero,
+        };
 
         var stream = new PortAudioSharp.Stream(
             inParams: param,
@@ -105,11 +123,18 @@ public class MicrophoneTranscriptor : SingleChannelTranscriptor, IMicrophoneTran
                 return StreamCallbackResult.Abort;
             }
 
-            var bufferSize = (int)frameCount * 2; // 2 bytes per sample
-            var samples = new byte[bufferSize];
-            Marshal.Copy(input, samples, 0, bufferSize);
+            var size = frameCount * inputChannels * 2;
+            var buffer = pool.Rent((int)size);
 
-            writer.TryWrite(samples);
+            try
+            {
+                Marshal.Copy(input, buffer, 0, (int)size);
+                writer.TryWrite(buffer);
+            }
+            finally
+            {
+                pool.Return(buffer);
+            }
 
             return StreamCallbackResult.Continue;
         }
