@@ -85,7 +85,7 @@ class Program
         using var session = await transcriptor.StartAsync(
             recordDevices.First(d => d.Name == "Microphone (ATR2500x-USB Microphone)"),
             options,
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
         // using var session = await transcriptor.TranscribeAsync(url, options, CancellationToken.None);
         // using var session2 = await transcriptor2.TranscribeAsync(filePath, options with
         // {

@@ -73,7 +73,7 @@
         var serviceUri = new Uri("ws://192.168.20.118:9091");
         transcriptor = new SingleChannelTranscriptor(serviceUri);
         var filterPipeline = new SegmentFilterFilterPipeline();
-        filterPipeline.AddFilter<LastSegmentPerStartTimeFilter>();
+        filterPipeline.AddFilter(new LastSegmentPerStartTimeFilter(3));
 
         var options =
             new WhisperTranscriptorOptions(
