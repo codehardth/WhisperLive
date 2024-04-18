@@ -9,22 +9,24 @@ internal static class WebSocketExtensions
     public static async Task InitiateConnectionAsync(
         this WebSocket socket,
         Guid sessionId,
-        WhisperTranscriptorOptions options)
+        TranscriptorConfiguration configuration)
     {
         var serverReady = false;
 
         socket.OnMessage += ServerReadyListener;
 
-        socket.Send(JsonSerializer.Serialize(new
+        var json = JsonSerializer.Serialize(new
         {
             uid = sessionId,
-            language = options.Language,
+            language = configuration.Language,
             task = "transcribe",
-            model = options.Model,
-            use_vad = options.UseVoiceActivityDetection,
+            model = configuration.Model,
+            use_vad = configuration.UseVoiceActivityDetection,
             channel = 1,
-            multilingual = options.IsMultiLanguage,
-        }));
+            multilingual = configuration.IsMultiLanguage,
+            options = configuration.Options,
+        });
+        socket.Send(json);
 
         while (!serverReady)
         {

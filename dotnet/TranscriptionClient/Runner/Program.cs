@@ -13,7 +13,7 @@ class Program
 {
     public static async Task Main(string[] args)
     {
-        var baseUri = "192.168.1.59";
+        var baseUri = "localhost";
         var serviceUri = new Uri($"ws://{baseUri}:9090");
 
         using var dockerClient =
@@ -38,7 +38,7 @@ class Program
 
         // using var transcriptor = new MultiChannelTranscriptor(coordinator);
         // using var transcriptor = new SingleChannelTranscriptor(serviceUri);
-        using var transcriptor = new MicrophoneTranscriptor(serviceUri);
+        using var transcriptor = new SingleChannelTranscriptor(serviceUri);
 
         var historyFilter = new HistoryMaintainerFilter();
 
@@ -47,14 +47,18 @@ class Program
         filterFilterPipeline.AddFilter<RemoveUnwantedWordsFilter>();
         filterFilterPipeline.AddFilter(new LastSegmentPerStartTimeFilter(3));
 
-        var options = new WhisperTranscriptorOptions(
+        var options = new TranscriptorConfiguration(
             model: "CodeHardThailand/whisper-th-medium-combined-ct2",
-            language: "en",
+            language: "th",
             isMultiLanguage: false,
             useVoiceActivityDetection: true,
             transcriptionDelay: TimeSpan.FromMilliseconds(100),
             transcriptionTimeout: TimeSpan.FromSeconds(30),
-            segmentFilter: filterFilterPipeline);
+            segmentFilter: filterFilterPipeline,
+            options: TranscriptionOptions.Default with
+            {
+                RepetitionPenalty = 1.1f,
+            });
         var url = new Uri("https://livestream.parliament.go.th/lives/playlist.m3u8");
         // await transcriptor.StartRecordAsync(url, options);
 
@@ -81,9 +85,9 @@ class Program
 
         var filePath = "/home/deszolate/Downloads/we_can_work_it_out.aac";
 
-        var recordDevices = transcriptor.GetCaptureDevices().ToList();
+        // var recordDevices = transcriptor.GetCaptureDevices().ToList();
         using var session = await transcriptor.StartAsync(
-            recordDevices.First(d => d.Name == "Microphone (ATR2500x-USB Microphone)"),
+            new Uri("https://tv-live.tpchannel.org/live/tv.m3u8"),
             options,
             cancellationToken: CancellationToken.None);
         // using var session = await transcriptor.TranscribeAsync(url, options, CancellationToken.None);

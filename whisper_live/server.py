@@ -4,12 +4,15 @@ import threading
 import json
 import functools
 import logging
+from typing import Optional
+
 import torch
 import numpy as np
 from websockets.sync.server import serve
 from websockets.exceptions import ConnectionClosed
 from whisper_live.vad import VoiceActivityDetector
-from whisper_live.transcriber import WhisperModel
+from whisper_live.transcriber import WhisperModel, TranscriptionOptions
+
 try:
     from whisper_live.transcriber_tensorrt import WhisperTRTLLM
 except Exception:
@@ -159,6 +162,10 @@ class TranscriptionServer:
             if faster_whisper_custom_model_path is not None and os.path.exists(faster_whisper_custom_model_path):
                 logging.info(f"Using custom model {faster_whisper_custom_model_path}")
                 options["model"] = faster_whisper_custom_model_path
+
+            transcription_options_raw = options["options"]
+            transcription_options = (
+                TranscriptionOptions(**transcription_options_raw)) if transcription_options_raw is not None else None
             client = ServeClientFasterWhisper(
                 websocket,
                 language=options["language"],
@@ -168,8 +175,9 @@ class TranscriptionServer:
                 initial_prompt=options.get("initial_prompt"),
                 vad_parameters=options.get("vad_parameters"),
                 use_vad=self.use_vad,
+                transcription_options=transcription_options
             )
-            logging.info("Running faster_whisper backend.")
+            logging.info(f"Running faster_whisper backend with options = {transcription_options}.")
 
         self.client_manager.add_client(websocket, client)
 
@@ -335,7 +343,7 @@ class TranscriptionServer:
                 client = self.client_manager.get_client(websocket)
                 if not client.eos:
                     client.set_eos(True)
-                time.sleep(0.1)    # Sleep 100m; wait some voice activity.
+                time.sleep(0.1)  # Sleep 100m; wait some voice activity.
             return False
         return True
 
@@ -368,8 +376,8 @@ class ServeClientBase(object):
         self.t_start = None
         self.exit = False
         self.same_output_threshold = 0
-        self.show_prev_out_thresh = 5   # if pause(no output from whisper) show previous output for 5 seconds
-        self.add_pause_thresh = 3       # add a blank to segment list as a pause(no speech) for 3 seconds
+        self.show_prev_out_thresh = 5  # if pause(no output from whisper) show previous output for 5 seconds
+        self.add_pause_thresh = 3  # add a blank to segment list as a pause(no speech) for 3 seconds
         self.transcript = []
         self.send_last_n_segments = 10
 
@@ -405,9 +413,9 @@ class ServeClientBase(object):
 
         """
         self.lock.acquire()
-        if self.frames_np is not None and self.frames_np.shape[0] > 45*self.RATE:
+        if self.frames_np is not None and self.frames_np.shape[0] > 45 * self.RATE:
             self.frames_offset += 30.0
-            self.frames_np = self.frames_np[int(30*self.RATE):]
+            self.frames_np = self.frames_np[int(30 * self.RATE):]
             # check timestamp offset(should be >= self.frame_offset)
             # this basically means that there is no speech as timestamp offset hasnt updated
             # and is less than frame_offset
@@ -425,7 +433,7 @@ class ServeClientBase(object):
         Clip audio if the current chunk exceeds 30 seconds, this basically implies that
         no valid segment for the last 30 seconds from whisper
         """
-        if self.frames_np[int((self.timestamp_offset - self.frames_offset)*self.RATE):].shape[0] > 25 * self.RATE:
+        if self.frames_np[int((self.timestamp_offset - self.frames_offset) * self.RATE):].shape[0] > 25 * self.RATE:
             duration = self.frames_np.shape[0] / self.RATE
             self.timestamp_offset = self.frames_offset + duration - 5
 
@@ -662,7 +670,7 @@ class ServeClientTensorRT(ServeClientBase):
                 break
 
             if self.frames_np is None:
-                time.sleep(0.02)    # wait for any audio to arrive
+                time.sleep(0.02)  # wait for any audio to arrive
                 continue
 
             self.clip_audio_if_no_valid_segment()
@@ -681,8 +689,17 @@ class ServeClientTensorRT(ServeClientBase):
 
 
 class ServeClientFasterWhisper(ServeClientBase):
-    def __init__(self, websocket, task="transcribe", device=None, language=None, client_uid=None, model="small.en",
-                 initial_prompt=None, vad_parameters=None, use_vad=True):
+    def __init__(self,
+                 websocket,
+                 task="transcribe",
+                 device=None,
+                 language=None,
+                 client_uid=None,
+                 model="small.en",
+                 initial_prompt=None,
+                 vad_parameters=None,
+                 use_vad=True,
+                 transcription_options: Optional[TranscriptionOptions] = None):
         """
         Initialize a ServeClient instance.
         The Whisper model is initialized based on the client's language and device availability.
@@ -712,6 +729,7 @@ class ServeClientFasterWhisper(ServeClientBase):
         self.initial_prompt = initial_prompt
         self.vad_parameters = vad_parameters or {"threshold": 0.5}
         self.no_speech_thresh = 0.45
+        self.transcription_options = transcription_options
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -795,13 +813,22 @@ class ServeClientFasterWhisper(ServeClientBase):
             depends on the implementation of the `transcriber.transcribe` method but typically
             includes the transcribed text.
         """
-        result, info = self.transcriber.transcribe(
-            input_sample,
-            initial_prompt=self.initial_prompt,
-            language=self.language,
-            task=self.task,
-            vad_filter=self.use_vad,
-            vad_parameters=self.vad_parameters if self.use_vad else None)
+        if self.transcription_options is None:
+            result, info = self.transcriber.transcribe(
+                input_sample,
+                initial_prompt=self.initial_prompt,
+                language=self.language,
+                task=self.task,
+                vad_filter=self.use_vad,
+                vad_parameters=self.vad_parameters if self.use_vad else None)
+        else:
+            result, info = self.transcriber.transcribe_with_options(
+                input_sample,
+                language=self.language,
+                task=self.task,
+                options=self.transcription_options,
+                vad_filter=self.use_vad,
+                vad_parameters=self.vad_parameters if self.use_vad else None)
 
         if self.language is None and info is not None:
             self.set_language(info)
@@ -890,7 +917,7 @@ class ServeClientFasterWhisper(ServeClientBase):
 
                 if result is None or self.language is None:
                     self.timestamp_offset += duration
-                    time.sleep(0.25)    # wait for voice activity, result is None when no voice activity
+                    time.sleep(0.25)  # wait for voice activity, result is None when no voice activity
                     continue
                 self.handle_transcription_output(result, duration)
 

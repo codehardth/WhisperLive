@@ -1,15 +1,16 @@
 namespace WhisperLive.Abstraction.Configurations;
 
-public sealed record WhisperTranscriptorOptions
+public sealed record TranscriptorConfiguration
 {
-    public WhisperTranscriptorOptions(
+    public TranscriptorConfiguration(
         string model,
         string? language,
         bool isMultiLanguage,
         bool useVoiceActivityDetection,
         TimeSpan transcriptionDelay,
         TimeSpan transcriptionTimeout,
-        ISegmentFilter? segmentFilter)
+        ISegmentFilter? segmentFilter,
+        TranscriptionOptions options)
     {
         this.Model = model;
         this.Language = language;
@@ -18,9 +19,10 @@ public sealed record WhisperTranscriptorOptions
         this.TranscriptionDelay = transcriptionDelay;
         this.TranscriptionTimeout = transcriptionTimeout;
         this.SegmentFilter = segmentFilter;
+        this.Options = options;
     }
 
-    public WhisperTranscriptorOptions(
+    public TranscriptorConfiguration(
         string model,
         string? language,
         bool isMultiLanguage,
@@ -33,11 +35,12 @@ public sealed record WhisperTranscriptorOptions
             true,
             transcriptionDelay,
             transcriptionTimeout,
-            default)
+            default,
+            TranscriptionOptions.Default)
     {
     }
 
-    public WhisperTranscriptorOptions(
+    public TranscriptorConfiguration(
         string model,
         string? language,
         bool isMultiLanguage,
@@ -49,11 +52,12 @@ public sealed record WhisperTranscriptorOptions
             true,
             transcriptionDelay,
             TimeSpan.FromSeconds(30),
-            default)
+            default,
+            TranscriptionOptions.Default)
     {
     }
 
-    public WhisperTranscriptorOptions(
+    public TranscriptorConfiguration(
         string model,
         string? language,
         bool isMultiLanguage)
@@ -64,7 +68,8 @@ public sealed record WhisperTranscriptorOptions
             true,
             TimeSpan.FromSeconds(300),
             TimeSpan.FromSeconds(30),
-            default)
+            default,
+            TranscriptionOptions.Default)
     {
     }
 
@@ -74,11 +79,13 @@ public sealed record WhisperTranscriptorOptions
 
     public bool IsMultiLanguage { get; init; }
 
-    public bool UseVoiceActivityDetection { get; set; }
+    public bool UseVoiceActivityDetection { get; init; }
 
     public TimeSpan TranscriptionDelay { get; init; }
 
     public TimeSpan TranscriptionTimeout { get; init; }
 
-    public ISegmentFilter? SegmentFilter { get; set; }
+    public ISegmentFilter? SegmentFilter { get; init; }
+
+    public TranscriptionOptions Options { get; init; }
 }

@@ -18,7 +18,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
 
     public override async Task<TranscriptionSession> StartAsync(
         Uri uri,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default)
     {
         var analysis = await FFProbe.AnalyseAsync(uri, cancellationToken: cancellationToken);
@@ -30,7 +30,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
             ct => PcmReader.FromHlsAsync(uri, numberOfChannel, ct),
             sessionId,
             numberOfChannel,
-            options,
+            configuration,
             cancellationToken);
 
         return new TranscriptionSession(sessionId, default);
@@ -38,7 +38,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
 
     public override async Task<TranscriptionSession> StartAsync(
         string filePath,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default)
     {
         var analysis = await FFProbe.AnalyseAsync(filePath, new FFOptions(), cancellationToken);
@@ -48,7 +48,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
 
         var session = await TranscribeAsync(
             buffer,
-            options,
+            configuration,
             numberOfChannel,
             cancellationToken);
 
@@ -108,7 +108,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
         IAsyncEnumerable<byte[]> stream,
         Guid sessionId,
         int audioChannelCount,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken)
     {
         this.AudioChannelCount = audioChannelCount;
@@ -126,8 +126,8 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
 
             var task = Task.Run(async () =>
             {
-                var socket = base.CreateWebSocket(endpoint, sessionId, options, speakerLabel);
-                await socket.InitiateConnectionAsync(sessionId, options);
+                var socket = base.CreateWebSocket(endpoint, sessionId, configuration, speakerLabel);
+                await socket.InitiateConnectionAsync(sessionId, configuration);
 
                 return socket;
             }, cancellationToken);
@@ -142,7 +142,7 @@ public class MultiChannelTranscriptor(ITranscriptionServerCoordinator coordinato
 
         // Start just 1 runner since stream can't be read by multiple readers.
         var firstSocket = this.sockets.First();
-        _ = base.RunStreamingLoopAsync(firstSocket, stream, sessionId, options, cancellationToken);
+        _ = base.RunStreamingLoopAsync(firstSocket, stream, sessionId, configuration, cancellationToken);
     }
 
     private static NDArray Decode(byte[] buffer, int channels)

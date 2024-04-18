@@ -31,25 +31,25 @@ public abstract class WhisperTranscriptor : ITranscriptor
 
     public abstract Task<TranscriptionSession> StartAsync(
         Uri uri,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default);
 
     public abstract Task<TranscriptionSession> StartAsync(
         string filePath,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default);
 
     public Task<TranscriptionSession> TranscribeAsync(
         Stream stream,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default)
     {
-        return this.TranscribeAsync(stream, options, 1, cancellationToken);
+        return this.TranscribeAsync(stream, configuration, 1, cancellationToken);
     }
 
     public async Task<TranscriptionSession> TranscribeAsync(
         Stream stream,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         int audioChannelCount = 1,
         CancellationToken cancellationToken = default)
     {
@@ -59,7 +59,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
             IterateStreamAsync,
             sessionId,
             audioChannelCount,
-            options,
+            configuration,
             cancellationToken);
 
         return new TranscriptionSession(sessionId, stream);
@@ -88,7 +88,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
         Func<CancellationToken, IAsyncEnumerable<byte[]>> streamFunc,
         Guid sessionId,
         int audioChannelCount,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken)
     {
         await this.semaphore.WaitAsync(cancellationToken);
@@ -102,7 +102,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
             ct = cts.Token;
         }
 
-        await ProcessStreamAsync(streamFunc(ct), sessionId, audioChannelCount, options, ct);
+        await ProcessStreamAsync(streamFunc(ct), sessionId, audioChannelCount, configuration, ct);
 
         this.pendingCancellationTokenSources.Add(sessionId, cts);
         this.semaphore.Release();
@@ -112,7 +112,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
         IAsyncEnumerable<byte[]> stream,
         Guid sessionId,
         int audioChannelCount,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken);
 
     protected virtual Task SendPacketToServerAsync(
@@ -130,14 +130,14 @@ public abstract class WhisperTranscriptor : ITranscriptor
         Uri endpoint,
         Guid sessionId,
         IAsyncEnumerable<byte[]> stream,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken ct)
     {
-        var socket = CreateWebSocket(endpoint, sessionId, options);
-        await socket.InitiateConnectionAsync(sessionId, options);
+        var socket = CreateWebSocket(endpoint, sessionId, configuration);
+        await socket.InitiateConnectionAsync(sessionId, configuration);
 
         _ = Task.Run(
-            () => RunStreamingLoopAsync(socket, stream, sessionId, options, ct),
+            () => RunStreamingLoopAsync(socket, stream, sessionId, configuration, ct),
             ct);
     }
 
@@ -156,7 +156,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
     protected WebSocket CreateWebSocket(
         Uri endpoint,
         Guid sessionId,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         string label = "")
     {
         var socket = new WebSocket(endpoint.AbsoluteUri);
@@ -189,7 +189,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
                 var hasSpeaker = payload.RootElement.TryGetProperty("speaker", out var speakerElement);
                 var speaker = hasSpeaker ? speakerElement.GetString() : label;
 
-                if (options.SegmentFilter is { } filter)
+                if (configuration.SegmentFilter is { } filter)
                 {
                     var filteredSegments = filter.Filter(segments);
 
@@ -213,7 +213,7 @@ public abstract class WhisperTranscriptor : ITranscriptor
         WebSocket socket,
         IAsyncEnumerable<byte[]> stream,
         Guid sessionId,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken ct)
     {
         var lastResponseReceived = DateTimeOffset.UtcNow;
@@ -229,13 +229,13 @@ public abstract class WhisperTranscriptor : ITranscriptor
                     return;
                 }
 
-                await Task.Delay(options.TranscriptionDelay, ct);
+                await Task.Delay(configuration.TranscriptionDelay, ct);
                 await this.SendPacketToServerAsync(socket, buffer);
             }
 
             while (!ct.IsCancellationRequested &&
                    DateTimeOffset.UtcNow.Subtract(lastResponseReceived).TotalSeconds <
-                   options.TranscriptionTimeout.Seconds)
+                   configuration.TranscriptionTimeout.Seconds)
             {
                 await Task.Delay(100, ct);
             }

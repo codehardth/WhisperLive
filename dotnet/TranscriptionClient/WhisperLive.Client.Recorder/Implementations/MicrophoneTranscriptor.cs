@@ -39,7 +39,7 @@ public class MicrophoneTranscriptor : MultiChannelTranscriptor, IMicrophoneTrans
 
     public async Task<TranscriptionSession> StartAsync(
         RecordDevice device,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         int? limitedAudioChannel = default,
         CancellationToken cancellationToken = default)
     {
@@ -48,10 +48,10 @@ public class MicrophoneTranscriptor : MultiChannelTranscriptor, IMicrophoneTrans
         var channelCount = limitedAudioChannel ?? device._deviceInfo.maxInputChannels;
 
         await InternalTranscribeAsync(
-            ct => ReadFromMicrophoneAsync(device, channelCount, options, ct),
+            ct => ReadFromMicrophoneAsync(device, channelCount, configuration, ct),
             sessionId,
             channelCount,
-            options,
+            configuration,
             cancellationToken);
 
         return new TranscriptionSession(sessionId, default);
@@ -60,7 +60,7 @@ public class MicrophoneTranscriptor : MultiChannelTranscriptor, IMicrophoneTrans
     private async IAsyncEnumerable<byte[]> ReadFromMicrophoneAsync(
         RecordDevice device,
         int channelCount,
-        WhisperTranscriptorOptions _,
+        TranscriptorConfiguration _,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         const int sampleRate = 16_000;

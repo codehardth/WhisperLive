@@ -9,7 +9,7 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
 
     public override async Task<TranscriptionSession> StartAsync(
         Uri uri,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default)
     {
         var sessionId = Guid.NewGuid();
@@ -18,7 +18,7 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
             ct => PcmReader.FromHlsAsync(uri, 1, ct),
             sessionId,
             1,
-            options,
+            configuration,
             cancellationToken);
 
         return new TranscriptionSession(sessionId, default);
@@ -26,14 +26,14 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
 
     public override async Task<TranscriptionSession> StartAsync(
         string filePath,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default)
     {
         var buffer = PcmReader.FromFile(filePath);
 
         var session = await TranscribeAsync(
             buffer,
-            options,
+            configuration,
             1,
             cancellationToken);
 
@@ -44,14 +44,14 @@ public class SingleChannelTranscriptor(Uri serviceUri) : WhisperTranscriptor
         IAsyncEnumerable<byte[]> stream,
         Guid sessionId,
         int audioChannelCount,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken)
     {
         await OpenWebSocketConnectionAndStreamAudioAsync(
             this.ServiceUri,
             sessionId,
             stream,
-            options,
+            configuration,
             cancellationToken);
     }
 }

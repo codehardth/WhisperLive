@@ -14,15 +14,3 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    
-  client-socket:
-    build:
-      context: .
-      dockerfile: ./docker/Dockerfile.client
-    environment:
-      TRASCRIPTION_SERVER_ADDR: "192.168.0.98"
-      TRANSCRIPTION_SERVER_PORT: "9090"
-      CLIENT_ADDR: "0.0.0.0"
-      CLIENT_PORT: "8765"
-    ports:
-      - "8765:8765"

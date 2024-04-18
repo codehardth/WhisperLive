@@ -183,7 +183,46 @@ class WhisperModel:
 
         return config
 
-    def transcribe(                                                         # noqa: C901
+    def transcribe_with_options(
+            self,
+            audio: Union[str, BinaryIO, np.ndarray],
+            options: TranscriptionOptions,
+            language: Optional[str] = None,
+            task: str = "transcribe",
+            vad_filter: bool = False,
+            vad_parameters: Optional[Union[dict, VadOptions]] = None):
+        return self.transcribe(
+            audio,
+            language=language,
+            task=task,
+            beam_size=options.beam_size,
+            best_of=options.best_of,
+            patience=options.patience,
+            length_penalty=options.length_penalty,
+            repetition_penalty=options.repetition_penalty,
+            no_repeat_ngram_size=options.no_repeat_ngram_size,
+            log_prob_threshold=options.log_prob_threshold,
+            no_speech_threshold=options.no_speech_threshold,
+            compression_ratio_threshold=options.compression_ratio_threshold,
+            condition_on_previous_text=options.condition_on_previous_text,
+            prompt_reset_on_temperature=options.prompt_reset_on_temperature,
+            temperature=options.temperatures,
+            initial_prompt=options.initial_prompt,
+            prefix=options.prefix,
+            suppress_blank=options.suppress_blank,
+            suppress_tokens=options.suppress_tokens,
+            without_timestamps=options.without_timestamps,
+            max_initial_timestamp=options.max_initial_timestamp,
+            word_timestamps=options.word_timestamps,
+            prepend_punctuations=options.prepend_punctuations,
+            append_punctuations=options.append_punctuations,
+            vad_filter=vad_filter,
+            vad_parameters=vad_parameters,
+            max_new_tokens=options.max_new_tokens,
+            clip_timestamps=options.clip_timestamps,
+            hallucination_silence_threshold=options.hallucination_silence_threshold)
+
+    def transcribe(
             self,
             audio: Union[str, BinaryIO, np.ndarray],
             language: Optional[str] = None,
@@ -495,8 +534,8 @@ class WhisperModel:
                 self.feature_extractor.nb_max_frames,
                 content_frames - seek,
                 seek_clip_end - seek,
-                )
-            segment = features[:, seek : seek + segment_size]
+            )
+            segment = features[:, seek: seek + segment_size]
             segment_duration = segment_size * self.feature_extractor.time_per_frame
             segment = pad_or_trim(segment, self.feature_extractor.nb_max_frames)
 
@@ -685,7 +724,7 @@ class WhisperModel:
                             continue
                         if is_segment_anomaly(segment):
                             next_segment = next_words_segment(
-                                current_segments[si + 1 :]
+                                current_segments[si + 1:]
                             )
                             if next_segment is not None:
                                 hal_next_start = next_segment["words"][0]["start"]
@@ -831,7 +870,7 @@ class WhisperModel:
 
             # Recover the average log prob from the returned score.
             seq_len = len(tokens)
-            cum_logprob = result.scores[0] * (seq_len**options.length_penalty)
+            cum_logprob = result.scores[0] * (seq_len ** options.length_penalty)
             avg_logprob = cum_logprob / (seq_len + 1)
 
             text = tokenizer.decode(tokens).strip()
@@ -909,7 +948,7 @@ class WhisperModel:
 
         if previous_tokens:
             prompt.append(tokenizer.sot_prev)
-            prompt.extend(previous_tokens[-(self.max_length // 2 - 1) :])
+            prompt.extend(previous_tokens[-(self.max_length // 2 - 1):])
 
         prompt.extend(tokenizer.sot_sequence)
 
@@ -926,7 +965,7 @@ class WhisperModel:
 
         return prompt
 
-    def add_word_timestamps(                                                    # noqa: C901
+    def add_word_timestamps(  # noqa: C901
             self,
             segments: List[dict],
             tokenizer: Tokenizer,

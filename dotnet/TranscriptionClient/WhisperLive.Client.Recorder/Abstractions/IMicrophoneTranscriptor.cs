@@ -11,7 +11,7 @@ public interface IMicrophoneTranscriptor : ITranscriptor
 
     Task<TranscriptionSession> StartAsync(
         RecordDevice device,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         int? limitedAudioChannel = default,
         CancellationToken cancellationToken = default);
 }

@@ -20,22 +20,22 @@ public interface ITranscriptor : IDisposable
 {
     Task<TranscriptionSession> StartAsync(
         Uri uri,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default);
 
     Task<TranscriptionSession> StartAsync(
         string filePath,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default);
 
     Task<TranscriptionSession> TranscribeAsync(
         Stream stream,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         CancellationToken cancellationToken = default);
 
     Task<TranscriptionSession> TranscribeAsync(
         Stream stream,
-        WhisperTranscriptorOptions options,
+        TranscriptorConfiguration configuration,
         int audioChannelCount = 1,
         CancellationToken cancellationToken = default);
 
