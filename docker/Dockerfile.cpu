@@ -9,35 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     bzip2 \
     libx11-6 \
-    wget \
+ && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-RUN apt update
-
-# install python
-RUN apt install software-properties-common -y && \
-    add-apt-repository ppa:deadsnakes/ppa && \
-    apt update
-
-RUN apt install python3.11 python3.11-dev -y
-    
-
-# install pip
-RUN wget https://bootstrap.pypa.io/get-pip.py
-RUN python3.11 get-pip.py
-
-# Create a working directory.
-RUN mkdir /app
 WORKDIR /app
 
 COPY scripts/setup.sh requirements/server.txt /app/
 
-RUN apt update --fix-missing
-RUN bash setup.sh
-RUN pip install -r server.txt
-RUN pip install git+https://github.com/m-bain/whisperx.git
+RUN apt update && bash setup.sh && pip install -r server.txt
 
 COPY whisper_live /app/whisper_live
 COPY run_server.py /app
 
-CMD ["python3.11", "run_server.py"]
+CMD ["python", "run_server.py"]

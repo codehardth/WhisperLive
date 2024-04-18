@@ -130,8 +130,8 @@ class TranscriptionServer:
         self.use_vad = True
 
     def initialize_client(
-        self, websocket, options, faster_whisper_custom_model_path,
-        whisper_tensorrt_path, trt_multilingual
+            self, websocket, options, faster_whisper_custom_model_path,
+            whisper_tensorrt_path, trt_multilingual
     ):
         if self.backend == "tensorrt":
             try:
@@ -297,15 +297,15 @@ class TranscriptionServer:
             port (int): The port number to bind the server.
         """
         with serve(
-            functools.partial(
-                self.recv_audio,
-                backend=backend,
-                faster_whisper_custom_model_path=faster_whisper_custom_model_path,
-                whisper_tensorrt_path=whisper_tensorrt_path,
-                trt_multilingual=trt_multilingual
-            ),
-            host,
-            port
+                functools.partial(
+                    self.recv_audio,
+                    backend=backend,
+                    faster_whisper_custom_model_path=faster_whisper_custom_model_path,
+                    whisper_tensorrt_path=whisper_tensorrt_path,
+                    trt_multilingual=trt_multilingual
+                ),
+                host,
+                port
         ) as server:
             server.serve_forever()
 
@@ -560,6 +560,7 @@ class ServeClientTensorRT(ServeClientBase):
             language=self.language,
             task=self.task
         )
+        self.warmup()
 
         # threading
         self.trans_thread = threading.Thread(target=self.speech_to_text)

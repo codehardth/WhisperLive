@@ -113,7 +113,7 @@ class WhisperDecoding:
             decoder_config['has_position_embedding'],
             has_token_type_embedding=self.
             decoder_config['has_token_type_embedding'],
-        )
+            )
         decoder_generation_session = tensorrt_llm.runtime.GenerationSession(
             decoder_model_config,
             decoder_engine_buffer,
@@ -137,8 +137,8 @@ class WhisperDecoding:
             decoder_input_ids.shape[-1]
             for _ in range(decoder_input_ids.shape[0])
         ],
-                                             dtype=torch.int32,
-                                             device='cuda')
+            dtype=torch.int32,
+            device='cuda')
         decoder_max_input_length = torch.max(decoder_input_lengths).item()
 
         # generation config
@@ -171,16 +171,8 @@ class WhisperDecoding:
 
 class WhisperTRTLLM(object):
 
-    def __init__(
-        self,
-        engine_dir,
-        debug_mode=False,
-        assets_dir=None,
-        device=None,
-        is_multilingual=False,
-        language="en",
-        task="transcribe"
-        ):
+    def __init__(self, engine_dir, assets_dir=None, device=None, is_multilingual=False,
+                 language="en", task="transcribe"):
         world_size = 1
         runtime_rank = tensorrt_llm.mpi_rank()
         runtime_mapping = tensorrt_llm.Mapping(world_size, runtime_rank)
@@ -204,10 +196,10 @@ class WhisperTRTLLM(object):
         self.filters = mel_filters(self.device, self.encoder.n_mels, assets_dir)
 
     def log_mel_spectrogram(
-        self,
-        audio: Union[str, np.ndarray, torch.Tensor],
-        padding: int = 0,
-        return_duration=True
+            self,
+            audio: Union[str, np.ndarray, torch.Tensor],
+            padding: int = 0,
+            return_duration=True
     ):
         """
         Compute the log-Mel spectrogram of
@@ -292,7 +284,7 @@ class WhisperTRTLLM(object):
             dtype='float16',
             batch_size=1,
             num_beams=1,
-            ):
+    ):
         mel = mel.type(str_dtype_to_torch(dtype))
         mel = mel.unsqueeze(0)
         predictions = self.process_batch(mel, text_prefix, num_beams)

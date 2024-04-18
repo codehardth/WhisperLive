@@ -129,12 +129,12 @@ def mel_filters(device,
 
 
 def log_mel_spectrogram(
-    audio: Union[str, np.ndarray, torch.Tensor],
-    n_mels: int,
-    padding: int = 0,
-    device: Optional[Union[str, torch.device]] = None,
-    return_duration: bool = False,
-    mel_filters_dir: str = None,
+        audio: Union[str, np.ndarray, torch.Tensor],
+        n_mels: int,
+        padding: int = 0,
+        device: Optional[Union[str, torch.device]] = None,
+        return_duration: bool = False,
+        mel_filters_dir: str = None,
 ):
     """
     Compute the log-Mel spectrogram of
@@ -196,7 +196,7 @@ def log_mel_spectrogram(
 
 
 def store_transcripts(filename: Pathlike, texts: Iterable[Tuple[str, str,
-                                                                str]]) -> None:
+str]]) -> None:
     """Save predicted results and reference transcripts to a file.
     https://github.com/k2-fsa/icefall/blob/master/icefall/utils.py
     Args:
@@ -215,10 +215,10 @@ def store_transcripts(filename: Pathlike, texts: Iterable[Tuple[str, str,
 
 
 def write_error_stats(                                              # noqa: C901
-    f: TextIO,
-    test_set_name: str,
-    results: List[Tuple[str, str]],
-    enable_log: bool = True,
+        f: TextIO,
+        test_set_name: str,
+        results: List[Tuple[str, str]],
+        enable_log: bool = True,
 ) -> float:
     """Write statistics based on predicted results and reference transcripts.
     https://github.com/k2-fsa/icefall/blob/master/icefall/utils.py
@@ -331,7 +331,7 @@ def write_error_stats(                                              # noqa: C901
                                        f"({ref_word}->{hyp_word})"
                                        for ref_word, hyp_word in ali)),
             file=f,
-        )
+            )
 
     print("", file=f)
     print("SUBSTITUTIONS: count ref -> hyp", file=f)
