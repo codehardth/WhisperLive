@@ -7,19 +7,43 @@ public sealed record TranscriptorConfiguration
         string? language,
         bool isMultiLanguage,
         bool useVoiceActivityDetection,
+        int cpuThreads,
         TimeSpan transcriptionDelay,
         TimeSpan transcriptionTimeout,
         ISegmentFilter? segmentFilter,
         TranscriptionOptions options)
     {
-        this.Model = model;
+        this.Model = string.IsNullOrWhiteSpace(model) ? "small.en" : model;
         this.Language = language;
         this.UseVoiceActivityDetection = useVoiceActivityDetection;
         this.IsMultiLanguage = isMultiLanguage;
+        this.CpuThreads = cpuThreads;
         this.TranscriptionDelay = transcriptionDelay;
         this.TranscriptionTimeout = transcriptionTimeout;
         this.SegmentFilter = segmentFilter;
         this.Options = options;
+    }
+
+    public TranscriptorConfiguration(
+        string model,
+        string? language,
+        bool isMultiLanguage,
+        bool useVoiceActivityDetection,
+        TimeSpan transcriptionDelay,
+        TimeSpan transcriptionTimeout,
+        ISegmentFilter? segmentFilter,
+        TranscriptionOptions options)
+        : this(
+            model,
+            language,
+            isMultiLanguage,
+            useVoiceActivityDetection,
+            0,
+            transcriptionDelay,
+            transcriptionTimeout,
+            segmentFilter,
+            options)
+    {
     }
 
     public TranscriptorConfiguration(
@@ -33,6 +57,7 @@ public sealed record TranscriptorConfiguration
             language,
             isMultiLanguage,
             true,
+            0,
             transcriptionDelay,
             transcriptionTimeout,
             default,
@@ -50,6 +75,7 @@ public sealed record TranscriptorConfiguration
             language,
             isMultiLanguage,
             true,
+            0,
             transcriptionDelay,
             TimeSpan.FromSeconds(30),
             default,
@@ -66,6 +92,7 @@ public sealed record TranscriptorConfiguration
             language,
             isMultiLanguage,
             true,
+            0,
             TimeSpan.FromSeconds(300),
             TimeSpan.FromSeconds(30),
             default,
@@ -73,13 +100,27 @@ public sealed record TranscriptorConfiguration
     {
     }
 
+    /// <summary>
+    /// model (str, optional): The whisper model size. Defaults to 'small.en'
+    /// </summary>
     public string Model { get; init; }
 
+    /// <summary>
+    /// language (str, optional): The language for transcription. Defaults to None.
+    /// </summary>
     public string? Language { get; init; }
 
+    /// <summary>
+    /// multilingual (bool, optional): Whether the client supports multilingual transcription. Defaults to False.
+    /// </summary>
     public bool IsMultiLanguage { get; init; }
 
     public bool UseVoiceActivityDetection { get; init; }
+
+    /// <summary>
+    /// cpu_threads: Number of threads to use when running on CPU (4 by default).
+    /// </summary>
+    public int CpuThreads { get; init; }
 
     public TimeSpan TranscriptionDelay { get; init; }
 

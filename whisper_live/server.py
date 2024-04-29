@@ -175,6 +175,7 @@ class TranscriptionServer:
                 initial_prompt=options.get("initial_prompt"),
                 vad_parameters=options.get("vad_parameters"),
                 use_vad=self.use_vad,
+                cpu_threads=options["cpu_threads"],
                 transcription_options=transcription_options
             )
             logging.info(f"Running faster_whisper backend with options = {transcription_options}.")
@@ -699,6 +700,7 @@ class ServeClientFasterWhisper(ServeClientBase):
                  initial_prompt=None,
                  vad_parameters=None,
                  use_vad=True,
+                 cpu_threads=0,
                  transcription_options: Optional[TranscriptionOptions] = None):
         """
         Initialize a ServeClient instance.
@@ -739,6 +741,7 @@ class ServeClientFasterWhisper(ServeClientBase):
         self.transcriber = WhisperModel(
             self.model_size_or_path,
             device=device,
+            cpu_threads=cpu_threads,
             compute_type="int8" if device == "cpu" else "float16",
             local_files_only=False,
         )

@@ -24,6 +24,7 @@ internal static class WebSocketExtensions
             use_vad = configuration.UseVoiceActivityDetection,
             channel = 1,
             multilingual = configuration.IsMultiLanguage,
+            cpu_threads = configuration.CpuThreads,
             options = configuration.Options,
         });
         socket.Send(json);
